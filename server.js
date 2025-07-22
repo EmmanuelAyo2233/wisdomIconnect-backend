@@ -100,6 +100,7 @@ autoSwaggerJs({
     description: "Wisdom connect api documentation and testing",
     title: "Wisdom Connect Api And Documentation",
     schemes: ["http", "https"],
+    host: "localhost:5000",
     routePrefix: `${API_URL}`,
     securityDefinitions: {
         BearerAuth: {
