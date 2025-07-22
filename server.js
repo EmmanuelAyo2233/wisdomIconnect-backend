@@ -19,27 +19,27 @@ const {
     commentRoutes,
 } = require("./routes");
 const { setupWebsocket } = require("./controllers/chatcontroller");
+const autoSwaggerJs = require("auto-swagger-js");
 
 // Initialize the Express application
 const app = express();
 
-// Setup Websocket.io connection for chat
-const server = http.createServer(app);
-
-const io = new Server(server, {
-    cors: {
-        origin: [
-            "http://localhost:5500",
-            "http://127.0.0.1:5500",
-            `${FRONTEND_URL}`,
-        ],
-        methods: ["GET", "POST", "PUT", "DELETE"],
-        credentials: true,
-    },
-});
+// --- Enhanced CORS Configuration ---
+const corsOptions = {
+    origin: [
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://127.0.0.1:5000",
+        "http://localhost:5000",
+        FRONTEND_URL,
+    ].filter(Boolean), // Remove any falsy values
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+};
 // --- Global Middleware Setup ---
 // Enable Cross-Origin Resource Sharing (CORS) for all routes
-app.use(cors());
+app.use(cors(corsOptions));
 // Set various HTTP headers for security using Helmet
 app.use(helmet());
 // Parse incoming requests with JSON payloads
@@ -48,6 +48,24 @@ app.use(express.json());
 app.use(cookieParser());
 // Parse incoming requests with URL-encoded payloads
 app.use(express.urlencoded({ extended: true }));
+
+//Setup Websocket.io connection for chat
+const server = http.createServer(app);
+
+const io = new Server(server, {
+    cors: {
+        origin: [
+            "http://localhost:5500",
+            "http://127.0.0.1:5500",
+            "http://127.0.0.1:5000",
+            "http://localhost:5000",
+            `${FRONTEND_URL}`,
+        ],
+        credentials: true,
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allowedHeaders: ["Content-Type", "Authorization"],
+    },
+});
 
 // --- API Routes Setup ---
 // Basic health check or welcome route for the root path
@@ -70,33 +88,37 @@ app.use(`${API_URL}/post`, postRoutes);
 // Mount comment routes under the /api/v1/comment prefix
 app.use(`${API_URL}/comment`, commentRoutes);
 
-// --- Error Handling Middleware ---
-// Catch-all for undefined routes (404 Not Found)
-app.use((req, res, next) => {
-    return next(new Error("This is error")); // Forwards a generic error to the global error handler
-});
-
-// Global error handler
-app.use((err, req, res, next) => {
-    if (res.headersSent) {
-        return next(err); // Let Express handle it
-    }
-
-    console.error("Unhandled error:", err);
-
-    return res.status(500).json({
-        status: "error",
-        message: err.message || "Something went wrong",
-    });
-});
-
 // Setup your /chat namespace
 setupWebsocket(io);
 
 // --- Server Startup ---
 // Start the Express server and listen on the configured PORT
 
-server.listen(PORT, () => {
+autoSwaggerJs({
+    app,
+    version: "1.0.0",
+    description: "Wisdom connect api documentation and testing",
+    title: "Wisdom Connect Api And Documentation",
+    schemes: ["http", "https"],
+    routePrefix: `${API_URL}`,
+    securityDefinitions: {
+        BearerAuth: {
+            type: "http",
+            scheme: "bearer",
+            bearerFormat: "JWT",
+        },
+    },
+    // Add these options:
+    swaggerOptions: {
+        cors: {
+            origin: FRONTEND_URL,
+            credentials: true,
+            methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        },
+    },
+});
+
+app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
     console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
 });
