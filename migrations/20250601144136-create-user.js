@@ -58,10 +58,6 @@ module.exports = {
                 type: Sequelize.STRING,
                 allowNull: true,
             },
-            experienceDescription: {
-                type: Sequelize.TEXT,
-                allowNull: true,
-            },
             role: {
                 type: Sequelize.STRING,
                 allowNull: true,
@@ -77,7 +73,7 @@ module.exports = {
                 onDelete: "CASCADE",
             },
             interest: {
-                type: Sequelize.STRING,
+                type: Sequelize.JSON,
                 allowNull: true,
             },
             startDate: {
@@ -90,10 +86,6 @@ module.exports = {
             },
             phone: {
                 type: Sequelize.STRING,
-                allowNull: true,
-            },
-            expertise: {
-                type: Sequelize.JSON,
                 allowNull: true,
             },
             fluentIn: {
@@ -144,6 +136,14 @@ module.exports = {
                 onUpdate: "CASCADE",
                 onDelete: "CASCADE",
             },
+            yearsOfExperience: {
+                type: Sequelize.INTEGER,
+                allowNull: false,
+            },
+            linkedInUrl: {
+                type: Sequelize.STRING,
+                allowNull: true,
+            },
             education: {
                 type: Sequelize.JSON,
                 allowNull: true,
@@ -162,10 +162,6 @@ module.exports = {
             },
             slotBooked: {
                 type: Sequelize.JSON,
-                allowNull: true,
-            },
-            discipline: {
-                type: Sequelize.STRING,
                 allowNull: true,
             },
             expertise: {

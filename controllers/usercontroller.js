@@ -18,26 +18,7 @@ const getdetails = async (req, res) => {
 const updateDetails = async (req, res) => {
     try {
         const userId = req.user.id;
-        const {
-            name,
-            email,
-            password,
-            bio,
-            experienceDescription,
-            gender,
-            role,
-            education,
-            experience,
-            available,
-            slotBooked,
-            phone,
-            discipline,
-            expertise,
-            fluentIn,
-            interest,
-            startDate,
-            endDate,
-        } = req.body;
+        const { body } = req.body;
 
         if (!userId) {
             return res.status(400).json({
@@ -56,30 +37,30 @@ const updateDetails = async (req, res) => {
         }
 
         // Update user details
-        if (name) user.name = name;
-        if (email) user.email = email;
-        if (password) user;
+        if (body.name) user.name = body.name;
+        if (body.email) user.email = body.email;
+        if (body.password) user.password = body.password;
         await user.save();
 
         if (user.userType === "mentor") {
             const mentor = await Mentor.findOne({ where: { user_id: userId } });
             if (mentor) {
                 Object.assign(mentor, {
-                    bio,
-                    experienceDescription,
-                    gender,
-                    role,
-                    education,
-                    experience,
-                    available,
-                    slotBooked,
-                    phone,
-                    discipline,
-                    expertise,
-                    fluentIn,
-                    interest,
-                    startDate,
-                    endDate,
+                    bio: body.bio,
+                    experienceDescription: body.experienceDescription,
+                    gender: body.gender,
+                    role: body.role,
+                    yearsOfExperience: body.yearsOfExperience,
+                    available: body.available,
+                    slotBooked: body.slotBooked,
+                    phone: body.phone,
+                    linkedInUrl: body.linkedInUrl,
+                    education: body.education,
+                    experience: body.experience,
+                    expertise: body.expertise,
+                    fluentIn: body.fluentIn,
+                    startDate: body.startDate,
+                    endDate: body.endDate,
                 });
                 await mentor.save();
             }
@@ -87,21 +68,14 @@ const updateDetails = async (req, res) => {
             const mentee = await Mentee.findOne({ where: { user_id: userId } });
             if (mentee) {
                 Object.assign(mentee, {
-                    bio,
-                    experienceDescription,
-                    gender,
-                    role,
-                    education,
-                    experience,
-                    available,
-                    slotBooked,
-                    phone,
-                    discipline,
-                    expertise,
-                    fluentIn,
-                    interest,
-                    startDate,
-                    endDate,
+                    bio: body.bio,
+                    gender: body.gender,
+                    role: body.role,
+                    phone: body.phone,
+                    fluentIn: body.fluentIn,
+                    interest: body.interest,
+                    startDate: body.startDate,
+                    endDate: body.endDate,
                 });
                 await mentee.save();
             }

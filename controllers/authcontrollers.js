@@ -54,48 +54,75 @@ const signup = async (req, res) => {
             });
         }
 
-        // Check if the confirm password is a match with password
-        if (body.confirmPassword !== body.password) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Confirm password not match with password",
+        if (body.userType === "mentor") {
+            if (!body.yearsOfExperience) {
+                return res.status(400).json({
+                    status: "fail",
+                    message: "Years of experience is required",
+                });
+            }
+
+            const hashedPassword = await bcrypt.hash(body.password, salt);
+
+            const newUser = await User.create({
+                name: body.name,
+                email: body.email,
+                password: hashedPassword,
+                userType: body.userType,
+            }, {exclude: ["password"]});
+
+            const mentor = await Mentor.create({
+                user_id: newUser.id,
+                yearsOfExperience: body.yearsOfExperience,
+            });
+
+            const userResponse = newUser.get({plain: true})
+
+            delete userResponse.password
+
+            return res.status(201).json({
+                status: "success",
+                message: "Registration successful",
+                data: { userResponse, mentor },
+            });
+        } else if (body.userType === "mentee") {
+
+            const hashedPassword = await bcrypt.hash(body.password, salt);
+
+            if (!body.interest) {
+                return res.status(400).json({
+                    status: "fail",
+                    message: "Interest is required",
+                });
+            }
+
+            const newUser = await User.create({
+                name: body.name,
+                email: body.email,
+                password: hashedPassword,
+                userType: body.userType,
+            }, {exclude: ["password"]});
+
+            const userResponse = newUser.get({plain: true})
+
+            delete userResponse.password
+
+
+
+            const mentee = await Mentee.create({
+                user_id: newUser.id,
+                interest: body.interest,
+
+            });
+
+            return res.status(201).json({
+                status: "success",
+                message: "Registration successful",
+                data: { userResponse, mentee },
             });
         }
 
-        // hash Password
-        const hashedPassword = await bcrypt.hash(body.password, salt);
 
-        const newUser = await User.create({
-            name: body.name,
-            email: body.email,
-            userType: body.userType,
-            password: hashedPassword,
-        });
-
-        if (!newUser || !newUser.id) {
-            return res.status(500).json({ message: "User creation failed" });
-        }
-
-        // Create Profile based o userType Detected
-        if (body.userType === "mentor") {
-            await Mentor.create({ user_id: newUser.id });
-        }
-
-        if (body.userType === "mentee") {
-            await Mentee.create({ user_id: newUser.id });
-        }
-
-        const responsData = {
-            name: newUser.name,
-            email: newUser.email,
-            userType: newUser.userType,
-        };
-
-        return res.status(201).json({
-            status: "success",
-            message: "Registration successful",
-            data: responsData,
-        });
     } catch (error) {
         res.status(500).json({
             message: "Failed to register user",
@@ -237,6 +264,6 @@ const restrictTo = (...userType) => {
     return checkPermission;
 };
 
-const resetPassword = async (req, res) => {};
+const resetPassword = async (req, res) => { };
 
 module.exports = { signup, login, authentication, restrictTo, resetPassword };

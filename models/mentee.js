@@ -14,10 +14,6 @@ const Mentee = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true,
         },
-        experienceDescription: {
-            type: DataTypes.TEXT,
-            allowNull: true,
-        },
         gender: {
             type: DataTypes.STRING,
             allowNull: true,
@@ -35,7 +31,7 @@ const Mentee = sequelize.define(
             },
         },
         interest: {
-            type: DataTypes.STRING,
+            type: DataTypes.JSON,
             allowNull: true,
         },
         startDate: {
@@ -48,10 +44,6 @@ const Mentee = sequelize.define(
         },
         phone: {
             type: DataTypes.STRING,
-            allowNull: true,
-        },
-        expertise: {
-            type: DataTypes.JSON,
             allowNull: true,
         },
         fluentIn: {

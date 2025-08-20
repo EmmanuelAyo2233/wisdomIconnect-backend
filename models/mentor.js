@@ -14,10 +14,6 @@ const Mentor = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true,
         },
-        experienceDescription: {
-            type: DataTypes.TEXT,
-            allowNull: true,
-        },
         user_id: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -37,8 +33,12 @@ const Mentor = sequelize.define(
         education: {
             type: DataTypes.JSON,
         },
-        experience: {
-            type: DataTypes.JSON,
+        yearsOfExperience: {
+            type: DataTypes.INTEGER,
+            allowNull: false,
+        },
+        experienceDescription: {
+            type: DataTypes.TEXT,
             allowNull: true,
         },
         available: {
