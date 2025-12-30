@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
@@ -34,7 +36,8 @@ DB_NAME_DEV = process.env.DB_NAME_DEV;
 DB_PORT = process.env.DB_PORT;
 DB_PASSWORD = process.env.DB_PASSWORD;
 DB_HOST = process.env.DB_HOST;
-SECRET_KEY = process.env.SECRET_KEY;
+const SECRET_KEY = process.env.SECRET_KEY || "wisdomconnectsecretkey";
+console.log("SECRET_KEY loaded:", SECRET_KEY); // 🔍 debug
 
 // Frontend environment variables
 FRONTEND_URL = process.env.FRONTEND_URL;

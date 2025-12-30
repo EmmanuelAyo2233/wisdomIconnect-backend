@@ -59,11 +59,11 @@ Mentor.belongsTo(User, { foreignKey: "user_id", as: "user" });
 User.hasOne(Mentee, { foreignKey: "user_id", as: "mentee" });
 Mentee.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
-Mentor.hasMany(Appointment, { foreignKey: "mentorId", as: "appointment" });
-Appointment.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
+// Mentor.hasMany(Appointment, { foreignKey: "mentorId", as: "appointment" });
+// Appointment.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
 
-Mentee.hasMany(Appointment, { foreignKey: "menteeId", as: "appointment" });
-Appointment.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
+// Mentee.hasMany(Appointment, { foreignKey: "menteeId", as: "appointment" });
+// Appointment.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
 
 Mentor.hasMany(ChatAccess, { foreignKey: "mentorId", as: "chatAccesses" });
 ChatAccess.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
@@ -96,7 +96,7 @@ User.hasMany(Comment, { foreignKey: "userId", as: "comment" });
 Comment.belongsTo(User, { foreignKey: "userId", as: "user" });
 
 User.hasMany(Availability, { foreignKey: "mentorId", as: "availability" });
-Availability.belongsTo(User, { foreignKey: "mentorId", as: "mentor" });
+Availability.belongsTo(User, { foreignKey: "mentorId", as: "mentorUser" });
 
 Post.hasMany(Comment, { foreignKey: "postId", as: "comment" });
 Comment.belongsTo(Post, { foreignKey: "postId", as: "post" });

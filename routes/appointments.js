@@ -1,59 +1,63 @@
-const { express } = require("../config/reuseablePackages");
-const {
-    authentication,
-    restrictTo,
-} = require("../controllers/authcontrollers");
-const {
-    getAllAppointments,
-    confirmAppointment,
-    rescheduleAppointment,
-    cancelAppointment,
-    deleteAppointment,
-    addAvailableDate,
-    getAllAvailabilityDate,
-    deleteAvailability,
-    updateAvailability,
-} = require("../controllers/appointments");
-
+const express = require("express");
 const router = express.Router();
 
-// Route to get all appointments
-router.route("/").get(authentication, restrictTo("mentor"), getAllAppointments);
-// Route to confirm an appointment
-router
-    .route("/:id/confirm")
-    .patch(authentication, restrictTo("mentor"), confirmAppointment);
-// Route to reschedule an appointment
-router
-    .route("/:id/reschedule")
-    .patch(authentication, restrictTo("mentor"), rescheduleAppointment);
-// Route to cancel an appointment
-router
-    .route("/:id/cancel")
-    .patch(authentication, restrictTo("mentor"), cancelAppointment);
+const {
+  bookAppointment,
+  getMenteeAppointments,
+  cancelAppointment,
+  deleteAppointment,
+  getMentorAppointments,
+  acceptAppointment,
+  rejectAppointment,
+  mentorRescheduleAppointment,
+  getNotifications,
+  markAsRead // ✅ added
+} = require("../controllers/appointments"); // make sure this matches your controller file name
 
-// Route to delete an appointment
-router
-    .route("/:id/delete")
-    .delete(authentication, restrictTo("mentor"), deleteAppointment);
+const { authentication, restrictTo } = require("../controllers/authcontrollers");
 
-// Route to add available appointment date and time
-router
-    .route("/add/availabledate")
-    .post(authentication, restrictTo("mentor"), addAvailableDate);
+// ========================
+// 📅 MENTEE ROUTES
+// ========================
 
-// Route to get all available dates and time
-router
-    .route("/availabilities")
-    .get(authentication, restrictTo("mentor"), getAllAvailabilityDate);
+// Book appointment with mentor
+router.post("/book/:id", authentication, restrictTo("mentee"), bookAppointment);
 
-// Route to update availability date and time
-router
-    .route("/update/availability/:id")
-    .patch(authentication, restrictTo("mentor"), updateAvailability);
+// Get all appointments for logged-in mentee
+router.get("/mentee", authentication, restrictTo("mentee"), getMenteeAppointments);
 
-router
-    .route("/delete/availability/:id")
-    .delete(authentication, restrictTo("mentor"), deleteAvailability);
+// Reschedule appointment
+// router.put("/:id/reschedule", authentication, restrictTo("mentee"), rescheduleAppointment);
+
+// Cancel appointment
+router.put("/:id/cancel", authentication, restrictTo("mentee"), cancelAppointment);
+
+// Delete appointment
+router.delete("/:id", authentication, restrictTo("mentee"), deleteAppointment);
+
+
+// ========================
+// 🧑🏽‍🏫 MENTOR ROUTES
+// ========================
+
+// Get all appointments for logged-in mentor
+router.get("/mentor", authentication, restrictTo("mentor"), getMentorAppointments);
+
+// Accept appointment
+router.put("/:id/accept", authentication, restrictTo("mentor"), acceptAppointment);
+
+// Reject appointment
+router.put("/:id/reject", authentication, restrictTo("mentor"), rejectAppointment);
+
+// Mentor reschedules appointment
+router.put("/:id/mentor-reschedule", authentication, restrictTo("mentor"), mentorRescheduleAppointment);
+
+// ✅ Get mentor notifications
+
+
+// Unified notifications route
+router.get("/notifications", authentication, getNotifications);
+router.put("/notifications/:id/read", authentication, markAsRead);
+
 
 module.exports = router;

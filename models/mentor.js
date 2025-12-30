@@ -11,9 +11,14 @@ const Mentor = sequelize.define(
             primaryKey: true,
         },
         bio: {
-            type: DataTypes.TEXT,
-            allowNull: true,
+        type: DataTypes.TEXT,
+        allowNull: true,
         },
+        linkedinUrl: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        },
+
         user_id: {
             type: DataTypes.INTEGER,
             allowNull: false,
@@ -49,14 +54,24 @@ const Mentor = sequelize.define(
             type: DataTypes.JSON,
             allowNull: true,
         },
+        isOnline: {
+  type: DataTypes.BOOLEAN,
+  defaultValue: false,
+},
+
         phone: {
             type: DataTypes.STRING,
             allowNull: true,
         },
-        discipline: {
-            type: DataTypes.STRING,
-            allowNull: true,
-        },
+        experience: {
+        type: DataTypes.JSON,
+        allowNull: true,
+    },
+    discipline: {
+        type: DataTypes.JSON,  // change from STRING → JSON
+        allowNull: true,
+    },
+
         expertise: {
             type: DataTypes.JSON,
             allowNull: true,
@@ -75,3 +90,4 @@ const Mentor = sequelize.define(
 );
 
 module.exports = Mentor;
+    

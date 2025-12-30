@@ -1,494 +1,436 @@
-const {
-    Appointment,
-    User,
-    Mentee,
-    Mentor,
-    ChatAccess,
-    Availability,
-} = require("../models");
-const { generateAccessCode } = require("../utils/generateaccesscode");
+const db = require("../config/db");
+const Appointment = require("../models/appointment");
+const Notification = require("../models/notification");
+const Mentor = require("../models/mentor");
+const Mentee = require("../models/mentee");
+const Availability = require("../models/availability");
+const User = require("../models/user");
 
-// Retrieves all appointments for the logged-in mentor
-const getAllAppointments = async (req, res) => {
-    try {
-        const user = req.user;
+// =====================
+// 📅 MENTEE ACTIONS
+// =====================
+// ✅ Book appointment
+exports.bookAppointment = async (req, res) => {
+  try {
+    const mentorUserId = req.params.id;
+    const menteeUserId = req.user.id;
+    const { date, startTime, endTime, topic, goals } = req.body;
 
-        const MentorProfile = await Mentor.findOne({
-            where: { user_id: req.user.id },
-            include: [{ model: User, as: "user", require: false }],
-            attributes: { exclude: ["password"] },
-        });
-
-        if (!MentorProfile) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Mentor not found`,
-            });
-        }
-
-        const appointments = await Appointment.findAll({
-            where: { mentorId: MentorProfile.id },
-            include: [
-                {
-                    model: Mentee,
-                    as: "mentee",
-                    include: [
-                        {
-                            model: User,
-                            as: "user",
-                            attributes: ["name", "email", "picture"],
-                        },
-                    ],
-                    required: false,
-                    attributes: {
-                        exclude: ["password", "createdAt", "updatedAt"],
-                    },
-                },
-            ],
-            order: [
-                ["date", "ASC"],
-                ["time", "ASC"],
-            ],
-        });
-
-        if (appointments.length === 0) {
-            return res.status(404).json({
-                status: "fail",
-                message: "No appointments found",
-            });
-        }
-
-        if (user.id !== MentorProfile.id) {
-            return res.status(403).json({
-                status: "fail",
-                message: "You are not authorized to view this appointment",
-            });
-        }
-        return res.status(201).json({
-            status: "success",
-            message: "Fetched all appointments successfully",
-            data: appointments,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to fetch all appointments",
-            error: error.message,
-        });
+    if (!date || !startTime || !endTime) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Date, start time, and end time are required ❌",
+      });
     }
+
+    // ✅ Find mentor
+    const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
+    if (!mentor) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentor not found ❌",
+      });
+    }
+
+    // ✅ Find mentee
+    const mentee = await Mentee.findOne({ where: { user_id: menteeUserId } });
+    if (!mentee) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentee not found ❌",
+      });
+    }
+
+    // ✅ Check slot availability
+    console.log("Booking slot for:", { mentorUserId, date, startTime, endTime });
+    const availabilitySlot = await Availability.findOne({
+      where: {
+        mentorId: mentorUserId, // ✅ fixed: use user id
+        date,
+        startTime,
+        endTime,
+        status: "available",
+      },
+    });
+
+    if (!availabilitySlot) {
+      return res.status(400).json({
+        status: "fail",
+        message: "This slot is already booked or unavailable ❌",
+      });
+    }
+
+    // ✅ Create appointment
+    const appointment = await Appointment.create({
+      mentorId: mentor.id,
+      menteeId: mentee.id,
+      date,
+      startTime,
+      endTime,
+      topic,
+      goals,
+      status: "pending",
+    });
+
+    // ✅ Mark slot as booked
+    await Promise.all([
+      availabilitySlot.update({ status: "booked" }),
+      appointment.update({ slotId: availabilitySlot.id }),
+    ]);
+
+    // ✅ Notify mentor
+    await Notification.create({
+      mentorId: mentor.id,
+      senderId: mentee.id,
+      message: `📅 New booking request from ${req.user.name} for ${date} at ${startTime}`,
+      type: "booking",
+    });
+
+    res.status(201).json({
+      status: "success",
+      message: "Appointment booked successfully ✅ Slot marked as booked 🔔",
+      data: appointment,
+    });
+  } catch (error) {
+    console.error("Error booking appointment:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to book appointment ❌",
+      error: error.message,
+    });
+  }
 };
 
-// Confirms an appointment by updating its status
-const confirmAppointment = async (req, res) => {
-    try {
-        const appointmentId = req.params.id;
-        const body = req.body;
-        const user = req.user;
 
-        const MentorProfile = await Mentor.findOne({
-            where: { user_id: req.user.id },
-            include: [
-                {
-                    model: User,
-                    as: "user",
-                    attributes: ["name"],
-                    require: false,
-                },
-            ],
-            attributes: { exclude: ["password"] },
-        });
+// ✅ Cancel appointment
+exports.cancelAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
 
-        if (!MentorProfile) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Mentor not found`,
-            });
-        }
-
-        if (user.id !== MentorProfile.user_id) {
-            return res.status(403).json({
-                status: "fail",
-                message: "You are not authorized to confirm this appointment",
-            });
-        }
-
-        const appointment = await Appointment.findByPk(appointmentId);
-
-        if (!appointment) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Appointment not found",
-            });
-        }
-
-        const mentorfullName = MentorProfile.user?.name;
-
-        const firstname = mentorfullName
-            .split(" ")[0]
-            .toLowerCase()
-            .replace(/[^a-z]/g, "");
-
-        generatedAccessCode = generateAccessCode(firstname);
-
-        appointment.status = body.status;
-        appointment.accessCode = generatedAccessCode;
-
-        // await appointment.save();
-
-        const chatAccess = await ChatAccess.findOne({
-            where: { bookingId: appointment.id },
-        });
-
-        if (chatAccess) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Chat acces code exist`,
-            });
-        }
-
-        const newChatAccess = await ChatAccess.create({
-            bookingId: appointment.id,
-            accessCode: generatedAccessCode,
-            mentorId: MentorProfile.id,
-            menteeId: appointment.menteeId,
-        });
-
-        return res.status(201).json({
-            status: "success",
-            message: "appointment confirmed successfully",
-            data: { appointment, newChatAccess },
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to confirm appointment",
-            error: error.message,
-        });
+    // Find mentee record linked to this user
+    const mentee = await Mentee.findOne({ where: { user_id: userId } });
+    if (!mentee) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentee not found ❌",
+      });
     }
-};
-// Reschedules an appointment
-const rescheduleAppointment = async (req, res) => {
-    try {
-        const appointmentId = req.params.id;
-        const body = req.body;
-        const user = req.user;
 
-        const MentorProfile = await Mentor.findOne({
-            where: { user_id: req.user.id },
-            include: [{ model: User, as: "user", require: false }],
-            attributes: { exclude: ["password"] },
-        });
+    // Find the appointment that belongs to this mentee
+    const appointment = await Appointment.findOne({
+      where: { id, menteeId: mentee.id },
+    });
 
-        if (!MentorProfile) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Mentor not found`,
-            });
-        }
-
-        const appointment = await Appointment.findByPk(appointmentId);
-
-        if (!appointment) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Appointment not found",
-            });
-        }
-
-        if (user.id !== appointment.mentorId) {
-            return res.status(401).json({
-                status: "fail",
-                message:
-                    "You are not authorized to reschedule this appointment",
-            });
-        }
-
-        appointment.date = body.date;
-        appointment.time = body.time;
-        appointment.status = "pending";
-        appointment.accessCode = null;
-
-        await appointment.save();
-
-        return res.status(201).json({
-            status: "success",
-            message: "appointment rescheduled successfully",
-            data: appointment,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to reschedule appointment",
-            error: error.message,
-        });
+    if (!appointment) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Appointment not found ❌",
+      });
     }
+
+    await appointment.update({ status: "cancelled" });
+
+    res.status(200).json({
+      status: "success",
+      message: "Appointment cancelled ✅",
+      data: appointment,
+    });
+  } catch (error) {
+    console.error("❌ Error cancelling appointment:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to cancel appointment ❌",
+      error: error.message,
+    });
+  }
 };
 
-// Cancels an appointment
-const cancelAppointment = async (req, res) => {
-    try {
-        const appointmentId = req.params.id;
-        const body = req.body;
-        const user = req.user;
 
-        const MentorProfile = await Mentor.findOne({
-            where: { user_id: req.user.id },
-            include: [{ model: User, as: "user", require: false }],
-            attributes: { exclude: ["password"] },
-        });
+// ✅ Get all appointments for a specific mentee
+exports.getMenteeAppointments = async (req, res) => {
+  try {
+    const menteeUserId = req.user.id;
 
-        if (!MentorProfile) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Mentor not found`,
-            });
-        }
-
-        const appointment = await Appointment.findByPk(appointmentId);
-
-        if (!appointment) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Appointment not found",
-            });
-        }
-
-        if (user.id !== appointment.menteeId) {
-            return res.status(403).json({
-                status: "fail",
-                message: "You are not authorized to cancel this appointment",
-            });
-        }
-
-        appointment.status = body.status;
-        appointment.accessCode = null;
-
-        await appointment.save();
-
-        return res.status(201).json({
-            status: "success",
-            message: "appointment cancel successfully",
-            data: appointment,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to cancel appointment",
-            error: error.message,
-        });
+    // 🧠 Find the mentee record linked to this user
+    const mentee = await Mentee.findOne({ where: { user_id: menteeUserId } });
+    if (!mentee) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentee not found ❌",
+      });
     }
+
+    // 🧩 Fetch appointments including mentor’s user info
+    const appointments = await Appointment.findAll({
+      where: { menteeId: mentee.id },
+      include: [
+        {
+          model: Mentor,
+          as: "mentor", // ✅ use alias from Appointment model
+          include: [
+            {
+              model: User,
+              as: "user", // ✅ alias from Mentor model in index.js
+              attributes: ["id", "name", "picture",],
+            },
+          ],
+        },
+      ],
+      order: [["date", "ASC"]],
+    });
+
+    if (!appointments || appointments.length === 0) {
+      return res.status(404).json({
+        status: "fail",
+        message: "No appointments found ❌",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: "Mentee appointments fetched successfully ✅",
+      data: appointments,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching mentee appointments:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch mentee appointments ❌",
+      error: error.message,
+    });
+  }
 };
 
-// Deletes an appointment
-const deleteAppointment = async (req, res) => {
-    try {
-        const appointmentId = req.params.id;
-        const user_id = req.user.id;
 
-        const MentorProfile = await Mentor.findOne({
-            where: { user_id: req.user.id },
-            include: [{ model: User, as: "user", require: false }],
-            attributes: { exclude: ["password"] },
-        });
 
-        if (!MentorProfile) {
-            return res.status(404).json({
-                status: "fail",
-                message: `Mentor not found`,
-            });
-        }
 
-        if (user_id !== MentorProfile.id) {
-            return res.status(404).json({
-                status: "fail",
-                message: `You are not authorized to delete this appointment`,
-            });
-        }
+// ✅ Delete appointment
+exports.deleteAppointment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const menteeUserId = req.user.id; // logged-in mentee user
 
-        const appointment = await Appointment.findByPk(appointmentId);
-
-        if (!appointment) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Appointment not found",
-            });
-        }
-
-        await appointment.destroy();
-
-        return res.status(201).json({
-            status: "success",
-            message: "appointment deleted successfully",
-            data: appointment,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to delete appointment",
-            error: error.message,
-        });
+    // ✅ Find the mentee linked to this user
+    const mentee = await Mentee.findOne({ where: { user_id: menteeUserId } });
+    if (!mentee) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentee not found ❌",
+      });
     }
+
+    // ✅ Find appointment that belongs to this mentee
+    const appointment = await Appointment.findOne({
+      where: { id, menteeId: mentee.id },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Appointment not found ❌",
+      });
+    }
+
+    // ✅ Delete appointment
+    await appointment.destroy();
+
+    res.status(200).json({
+      status: "success",
+      message: "Appointment deleted successfully ✅",
+    });
+  } catch (error) {
+    console.error("❌ Error deleting appointment:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to delete appointment ❌",
+      error: error.message,
+    });
+  }
 };
 
-// Add available dates and times
-async function addAvailableDate(req, res) {
-    try {
-        const body = req.body;
-        const user = req.user;
+// =====================
+// 🧑🏽‍🏫 MENTOR ACTIONS
+// =====================
 
-        if (!user) {
-            return res.status(404).json({
-                status: "fail",
-                message: `User not found`,
-            });
-        }
+// ✅ View all mentor appointments
+exports.getMentorAppointments = async (req, res) => {
+  try {
+    const mentorUserId = req.user.id;
 
-        const entries = await Availability.create({
-            mentorId: user.id,
-            date: body.date,
-            time: body.time,
-        });
-
-        return res.status(200).json({
-            status: "success",
-            message: "Available date added successfully",
-            entries: entries,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to add available date",
-            error: error.message,
-        });
+    // 🧠 Find the mentor record linked to this user
+    const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
+    if (!mentor) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Mentor not found ❌",
+      });
     }
-}
 
-// Get all available dates and times
-async function getAllAvailabilityDate(req, res) {
-    try {
-        const user = req.user;
+    // 🧩 Fetch appointments including mentee info
+    const appointments = await Appointment.findAll({
+      where: { mentorId: mentor.id },
+      include: [
+        {
+          model: Mentee,
+          as: "mentee",
+          include: [
+            {
+              model: User,
+              as: "user",
+              attributes: ["id", "name", "picture"],
+            },
+          ],
+        },
+      ],
+      order: [["date", "ASC"]],
+    });
 
-        if (!user) {
-            return res.status(404).json({
-                status: "fail",
-                message: `User not found`,
-            });
-        }
+    res.status(200).json({
+      status: "success",
+      message: "Mentor appointments fetched successfully ✅",
+      data: appointments,
+    });
+  } catch (error) {
+    console.error("❌ Error fetching mentor appointments:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch mentor appointments ❌",
+      error: error.message,
+    });
+  }
+};
 
-        const entries = await Availability.findAll({
-            where: { mentorId: user.id },
-        });
+// ✅ Accept appointment
+exports.acceptAppointment = async (req, res) => {
+  try {
+    const mentorUserId = req.user.id;
 
-        if (entries.length === 0) {
-            return res.status(404).json({
-                status: "fail",
-                message: "No available dates yet create one",
-            });
-        }
+    // 🧠 Find the mentor record linked to this user
+    const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
+    if (!mentor) return res.status(404).json({ status: "fail", message: "Mentor not found ❌" });
 
-        return res.status(200).json({
-            status: "success",
-            message: "Available date fetched successfully",
-            entries: entries,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to fetche aavailability",
-            error: error.message,
-        });
+    const appointment = await Appointment.findOne({
+      where: { id: req.params.id, mentorId: mentor.id },
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
     }
-}
 
-// update availability
-async function updateAvailability(req, res) {
-    try {
-        const { date, time } = req.body;
-        const availabilityId = req.params.id;
-        const user = req.user;
+    appointment.status = "accepted";
+    await appointment.save();
 
-        if (!user) {
-            return res.status(500).json({
-                message: "User not found",
-            });
-        }
+    // Create notification
+    await Notification.create({
+      mentorId: mentor.id,
+      senderId: appointment.menteeId,
+      message: "Your appointment has been accepted!",
+      type: "booking",
+    });
 
-        const availability = await Availability.findByPk(availabilityId);
+    res.json({ status: "success", message: "Appointment accepted successfully ✅", data: appointment });
+  } catch (error) {
+    console.error("❌ Accept appointment error:", error);
+    res.status(500).json({ status: "error", message: "Server error ❌", error: error.message });
+  }
+};
 
-        if (!availability) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Availability not found",
-            });
-        }
+// ✅ Reject appointment
+exports.rejectAppointment = async (req, res) => {
+  try {
+    const mentorUserId = req.user.id;
+    const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
+    if (!mentor) return res.status(404).json({ status: "fail", message: "Mentor not found ❌" });
 
-        if (user.id !== availability.mentorId) {
-            return res.status(403).json({
-                status: "fail",
-                message: "You are not authorized to update this availability",
-            });
-        }
+    const appointment = await Appointment.findOne({
+      where: { id: req.params.id, mentorId: mentor.id },
+    });
+    if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
 
-        if (date) availability.date = date;
-        if (time) availability.time = time;
+    appointment.status = "rejected";
+    await appointment.save();
 
-        await availability.save();
+    res.status(200).json({ status: "success", message: "Appointment rejected ✅", data: appointment });
+  } catch (error) {
+    console.error("❌ Reject appointment error:", error);
+    res.status(500).json({ status: "error", message: "Failed to reject ❌", error: error.message });
+  }
+};
 
-        return res.status(200).json({
-            status: "success",
-            message: "Availability updated successfully",
-            data: availability,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to update aavailability",
-            error: error.message,
-        });
-    }
-}
+// ✅ Mentor reschedules appointment
+exports.mentorRescheduleAppointment = async (req, res) => {
+  try {
+    const mentorUserId = req.user.id;
+    const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
+    if (!mentor) return res.status(404).json({ status: "fail", message: "Mentor not found ❌" });
 
-// delete availability
-async function deleteAvailability(req, res) {
-    try {
-        const user = req.user;
-        const availabilityId = req.params.id;
+    const appointment = await Appointment.findOne({
+      where: { id: req.params.id, mentorId: mentor.id },
+    });
+    if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
 
-        if (!user) {
-            return res.status(404).json({
-                status: "fail",
-                message: `User not found`,
-            });
-        }
+    const { date, startTime, endTime, rescheduleReason } = req.body;
 
-        const availability = await Availability.findByPk(availabilityId);
+    appointment.date = date || appointment.date;
+    appointment.startTime = startTime || appointment.startTime;
+    appointment.endTime = endTime || appointment.endTime;
+    appointment.rescheduleReason = rescheduleReason || "Mentor requested reschedule";
+    appointment.status = "mentor-rescheduled";
 
-        if (!availability) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Availability not found",
-            });
-        }
+    await appointment.save();
 
-        if (availability.userId !== user.id) {
-            return res.status(404).json({
-                status: "fail",
-                message: "You are not authorized to delete this availability",
-            });
-        }
-        await availability.destroy();
-        return res.status(200).json({
-            status: "success",
-            message: "Availability deleted successfully",
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to delete aavailability",
-            error: error.message,
-        });
-    }
-}
+    res.status(200).json({ status: "success", message: "Appointment rescheduled ✅", data: appointment });
+  } catch (error) {
+    console.error("❌ Reschedule appointment error:", error);
+    res.status(500).json({ status: "error", message: "Failed to reschedule ❌", error: error.message });
+  }
+};
 
-module.exports = {
-    getAllAppointments,
-    cancelAppointment,
-    rescheduleAppointment,
-    confirmAppointment,
-    deleteAppointment,
-    addAvailableDate,
-    getAllAvailabilityDate,
-    deleteAvailability,
-    updateAvailability,
+
+
+// ✅ Get notifications for logged-in user
+exports.getNotifications = async (req, res) => {
+  try {
+    const userType = req.user.role; // mentor or mentee
+    const whereClause =
+      userType === "mentor"
+        ? { mentorId: req.user.id }
+        : { menteeId: req.user.id };
+
+    const notifications = await Notification.findAll({
+      where: whereClause,
+      order: [["createdAt", "DESC"]],
+    });
+
+    res.status(200).json({
+      status: "success",
+      message: "Notifications fetched successfully ✅",
+      data: notifications,
+    });
+  } catch (error) {
+    console.error("Error fetching notifications:", error);
+    res.status(500).json({
+      status: "error",
+      message: "Failed to fetch notifications ❌",
+      error: error.message,
+    });
+  }
+};
+
+// ✅ Mark notification as read
+exports.markAsRead = async (req, res) => {
+  try {
+    const notif = await Notification.findByPk(req.params.id);
+    if (!notif)
+      return res.status(404).json({ message: "Notification not found ❌" });
+
+    notif.read = true;
+    await notif.save();
+
+    res.json({ status: "success", message: "Notification marked as read ✅" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: "error", message: "Failed to update notification ❌" });
+  }
 };

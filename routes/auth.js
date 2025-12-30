@@ -3,17 +3,35 @@ const {
     signup,
     login,
     resetPassword,
-} = require("../controllers/authcontrollers");
+    approveMentor,
+    rejectMentor,
+    authentication,
+    restrictTo,
+    logout,  // <-- import it
+} = require("../controllers/authcontrollers"); // make sure the name matches your controller
 
 const router = express.Router();
 
-// Route for user registration
+// Public routes
 router.route("/register").post(signup);
-
-// Route for user login
 router.route("/login").post(login);
-
-// Route to reset Password
 router.route("/reset").patch(resetPassword);
+router.post("/logout",  authentication, logout);
+
+
+// Admin-only routes for mentor approval/rejection
+router.patch(
+    "/admin/approve-mentor/:userId",
+    authentication,
+    restrictTo("admin"),
+    approveMentor
+);
+
+router.patch(
+    "/admin/reject-mentor/:userId",
+    authentication,
+    restrictTo("admin"),
+    rejectMentor
+);
 
 module.exports = router;

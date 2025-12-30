@@ -27,9 +27,21 @@ const User = sequelize.define(
             type: DataTypes.ENUM("mentor", "mentee"),
             allowNull: false,
         },
-        picture: {
-            type: DataTypes.STRING,
+        status: {
+            type: DataTypes.ENUM("pending", "approved", "rejected"),
+            allowNull: false,
+            defaultValue: "pending", // New mentors start as pending
         },
+       picture: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        },
+
+        approvedAt: {
+  type: DataTypes.DATE,
+  allowNull: true, // null until approved
+}
+            ,
         createdAt: {
             type: DataTypes.DATEONLY,
             allowNull: true,

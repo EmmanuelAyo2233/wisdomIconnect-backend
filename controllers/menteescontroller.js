@@ -8,86 +8,119 @@ const {
 
 // Retrieves a list of all available mentors
 const getAllMentors = async (req, res) => {
-    try {
-        const mentors = await Mentor.findAll({
-            include: [
-                {
-                    model: User,
-                    as: "user",
-                    required: false,
-                    attributes: { exclude: ["password"] },
-                },
-            ],
-        });
-        return res.status(201).json({
-            status: "success",
-            message: "All mentors fetched successfully",
-            data: mentors,
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to fetch all mentors",
-            error: error.message,
-        });
-    }
+  try {
+    console.log("🔑 Logged-in mentee id:", req.user?.id);
+
+    const mentors = await Mentor.findAll({
+      include: [
+        {
+          model: User,
+           as: "user",
+          attributes: ["id", "name", "countryCode", "picture", "status", "userType"],
+          where: { status: "approved", userType: "mentor" },
+        },
+      ],
+    });
+
+    const formatted = mentors.map((m) => ({
+      id: m.id,
+      user_id: m.user_id,
+     user: {
+  id: m.user?.id,
+  name: m.user?.name || "Unknown",
+  countryCode: m.user?.countryCode || "NG",
+   picture: m.user?.picture || "http://localhost:5000/uploads/default.png",
+},
+
+      expertise: m.expertise ? JSON.parse(m.expertise) : [],
+      yearsOfExperience: m.yearsOfExperience || 0,
+      attendance: m.attendance || "0%",
+      sessions: m.sessions || 0,
+      reviews: m.reviews || 0,
+    }));
+
+    res.status(200).json({
+      status: "success",
+      results: formatted.length,
+      data: formatted,
+    });
+  } catch (err) {
+    console.error("❌ Error fetching mentors:", err);
+    res.status(500).json({ status: "fail", message: "Server error" });
+  }
 };
 
-// Retrieves details for a specific mentor
+// ✅ Fetch full details of a specific mentor (for mentee)
 const getMentorsDetails = async (req, res) => {
-    try {
-        const id = req.params.id || req.query.id;
-        const email = req.params.email || req.query.email;
-
-        if (!id && !email) {
-            return res.status(400).json({
-                status: "fail",
-                message: "Please provide either mentor ID or email",
-            });
-        }
-
-        const whereClause = {};
-
-        if (id) whereClause.id = id;
-        if (email) whereClause.email = email;
-
-        const mentor = await Mentor.findOne({
-            where: whereClause,
-            include: [
-                {
-                    model: User,
-                    as: "user",
-                    attributes: { exclude: ["password"] },
-                },
-            ],
-        });
-
-        if (!mentor) {
-            return res.status(404).json({
-                status: "fail",
-                message: "Mentor not found",
-            });
-        }
-
-        const slot = await Availability.findAll({
-            where: { mentorId: mentor.id },
-            order: [
-                ["date", "ASC"],
-                ["time", "ASC"],
-            ],
-        });
-
-        return res.status(201).json({
-            status: "success",
-            message: "mentors details",
-            data: { mentor, avalableSlots: slot },
-        });
-    } catch (error) {
-        res.status(500).json({
-            message: "Failed to load mentor details",
-            error: error.message,
-        });
+  try {
+    const id = req.params.id || req.query.id;
+    if (!id) {
+      return res.status(400).json({ status: "fail", message: "Mentor ID is required" });
     }
+
+    const mentor = await Mentor.findOne({
+      where: { id, status: "approved" },
+      include: [
+        {
+          model: User,
+           as: "user",
+          attributes: [
+            "id",
+            "name",
+            "email",
+            "picture",
+            "status",
+            "userType",
+            "role",
+            "linkedinUrl",
+            "countryCode",
+          ],
+        },
+      ],
+    });
+
+    if (!mentor) {
+      return res.status(404).json({ status: "fail", message: "Mentor not found" });
+    }
+
+    // Fetch mentor's available slots
+    const availableSlots = await Availability.findAll({
+      where: { mentorId: mentor.id },
+      order: [
+        ["date", "ASC"],
+        ["time", "ASC"],
+      ],
+    });
+
+    const profile = {
+      id: mentor.id,
+      user_id: mentor.user_id,
+      name: mentor.User?.name || "Unknown",
+      email: mentor.User?.email || "",
+      picture: mentor.User?.picture || "images/default-avatar.png",
+      status: mentor.User?.status || "",
+      userType: mentor.User?.userType || "",
+      role: mentor.User?.role || "",
+      linkedinUrl: mentor.User?.linkedinUrl || "",
+      countryCode: mentor.User?.countryCode || "NG",
+      bio: mentor.bio || "",
+      expertise: mentor.expertise ? JSON.parse(mentor.expertise) : [],
+      disciplines: mentor.disciplines ? JSON.parse(mentor.disciplines) : [],
+      education: mentor.education ? JSON.parse(mentor.education) : [],
+      experience: mentor.experience ? JSON.parse(mentor.experience) : [],
+      experienceDescription: mentor.experienceDescription || "",
+      yearsOfExperience: mentor.yearsOfExperience || 0,
+      attendance: mentor.attendance || "0%",
+      availableSlots,
+    };
+
+    res.status(200).json({ status: "success", data: profile });
+  } catch (err) {
+    console.error("❌ Error fetching mentor profile:", err);
+    res.status(500).json({ status: "fail", message: "Server error" });
+  }
 };
+
 
 // Allows a mentee to book an appointment with a mentor
 const bookApppointment = async (req, res) => {
