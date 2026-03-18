@@ -83,6 +83,13 @@ app.use(`${API_URL}/mentors`, mentorRoutes);
 const availabilityRoutes = require("./routes/availability");
 app.use(`${API_URL}/availability`, availabilityRoutes);
 
+const notificationRoutes = require("./routes/notificationRoutes");
+app.use(`${API_URL}/notifications`, notificationRoutes);
+
+app.get("/test-notifications", (req, res) => {
+  res.json({ message: "Notifications route is alive ✅" });
+});
+
 
 // Setup /chat namespace
 setupWebsocket(io);

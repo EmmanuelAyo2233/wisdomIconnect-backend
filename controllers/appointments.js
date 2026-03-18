@@ -77,14 +77,17 @@ exports.bookAppointment = async (req, res) => {
       availabilitySlot.update({ status: "booked" }),
       appointment.update({ slotId: availabilitySlot.id }),
     ]);
-
     // ✅ Notify mentor
-    await Notification.create({
-      mentorId: mentor.id,
-      senderId: mentee.id,
-      message: `📅 New booking request from ${req.user.name} for ${date} at ${startTime}`,
-      type: "booking",
-    });
+await Notification.create({
+  receiverId: mentor.id,
+  receiverType: "mentor",
+  senderId: mentee.id,
+  message: `📅 New booking request from ${req.user.name} for ${date} at ${startTime}`,
+  type: "booking",
+  isRead: false,
+});
+
+
 
     res.status(201).json({
       status: "success",
@@ -322,12 +325,16 @@ exports.acceptAppointment = async (req, res) => {
     await appointment.save();
 
     // Create notification
-    await Notification.create({
-      mentorId: mentor.id,
-      senderId: appointment.menteeId,
-      message: "Your appointment has been accepted!",
-      type: "booking",
-    });
+await Notification.create({
+  receiverId: appointment.menteeId,
+  receiverType: "mentee",
+  senderId: mentor.id,
+  message: "✅ Your appointment has been accepted!",
+  type: "booking",
+  isRead: false,
+});
+
+
 
     res.json({ status: "success", message: "Appointment accepted successfully ✅", data: appointment });
   } catch (error) {
@@ -389,48 +396,48 @@ exports.mentorRescheduleAppointment = async (req, res) => {
 
 
 
-// ✅ Get notifications for logged-in user
-exports.getNotifications = async (req, res) => {
-  try {
-    const userType = req.user.role; // mentor or mentee
-    const whereClause =
-      userType === "mentor"
-        ? { mentorId: req.user.id }
-        : { menteeId: req.user.id };
+// // ✅ Get notifications for logged-in user
+// exports.getNotifications = async (req, res) => {
+//   try {
+//     const userType = req.user.role; // mentor or mentee
+//     const whereClause =
+//       userType === "mentor"
+//         ? { mentorId: req.user.id }
+//         : { menteeId: req.user.id };
 
-    const notifications = await Notification.findAll({
-      where: whereClause,
-      order: [["createdAt", "DESC"]],
-    });
+//     const notifications = await Notification.findAll({
+//       where: whereClause,
+//       order: [["createdAt", "DESC"]],
+//     });
 
-    res.status(200).json({
-      status: "success",
-      message: "Notifications fetched successfully ✅",
-      data: notifications,
-    });
-  } catch (error) {
-    console.error("Error fetching notifications:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Failed to fetch notifications ❌",
-      error: error.message,
-    });
-  }
-};
+//     res.status(200).json({
+//       status: "success",
+//       message: "Notifications fetched successfully ✅",
+//       data: notifications,
+//     });
+//   } catch (error) {
+//     console.error("Error fetching notifications:", error);
+//     res.status(500).json({
+//       status: "error",
+//       message: "Failed to fetch notifications ❌",
+//       error: error.message,
+//     });
+//   }
+// };
 
-// ✅ Mark notification as read
-exports.markAsRead = async (req, res) => {
-  try {
-    const notif = await Notification.findByPk(req.params.id);
-    if (!notif)
-      return res.status(404).json({ message: "Notification not found ❌" });
+// // ✅ Mark notification as read
+// exports.markAsRead = async (req, res) => {
+//   try {
+//     const notif = await Notification.findByPk(req.params.id);
+//     if (!notif)
+//       return res.status(404).json({ message: "Notification not found ❌" });
 
-    notif.read = true;
-    await notif.save();
+//     notif.read = true;
+//     await notif.save();
 
-    res.json({ status: "success", message: "Notification marked as read ✅" });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ status: "error", message: "Failed to update notification ❌" });
-  }
-};
+//     res.json({ status: "success", message: "Notification marked as read ✅" });
+//   } catch (err) {
+//     console.error(err);
+//     res.status(500).json({ status: "error", message: "Failed to update notification ❌" });
+//   }
+// };

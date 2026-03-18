@@ -35,13 +35,15 @@ const Availability = sequelize.define(
       type: DataTypes.TIME,
       allowNull: true,
     },
-//     slotDuration: {
-//   type: DataTypes.INTEGER, // in minutes
-//   allowNull: true,
-// },
-
-
-    
+    title: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    price: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      defaultValue: 0.00,
+    },
     status: {
       type: DataTypes.ENUM("available", "booked"),
       defaultValue: "available",

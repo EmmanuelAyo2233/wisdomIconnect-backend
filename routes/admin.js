@@ -14,7 +14,7 @@ router.delete("/delete-mentor/:id", adminController.deleteMentor);
 // Get rejected mentors
 router.get("/rejected-mentors", adminController.getRejectedMentors);
 
-    router.put("/reconsider-mentor/:id", adminController.reconsiderMentor);
+router.put("/reconsider-mentor/:id", adminController.reconsiderMentor);
 router.get("/mentees", adminController.getMentees);
 router.delete("/mentee/:id", adminController.deleteMentee);
 

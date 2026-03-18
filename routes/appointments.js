@@ -56,8 +56,8 @@ router.put("/:id/mentor-reschedule", authentication, restrictTo("mentor"), mento
 
 
 // Unified notifications route
-router.get("/notifications", authentication, getNotifications);
-router.put("/notifications/:id/read", authentication, markAsRead);
+// router.get("/notifications", authentication, getNotifications);
+// router.put("/notifications/:id/read", authentication, markAsRead);
 
 
 module.exports = router;

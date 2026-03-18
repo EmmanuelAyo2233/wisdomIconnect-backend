@@ -3,7 +3,7 @@ const Availability = require("../models/availability");
 
 exports.createAvailability = async (req, res) => {
   try {
-    const { date, day, startTime, endTime, status } = req.body;
+    const { date, day, startTime, endTime, status, title, price } = req.body;
     const mentorId = req.user.id;
 
     // 🔒 Check required fields
@@ -35,6 +35,8 @@ exports.createAvailability = async (req, res) => {
       day,
       startTime,
       endTime,
+      title: title || 'Mentorship Session',
+      price: price || 0,
       status: status || "available",
     });
 
@@ -175,6 +177,7 @@ exports.getAvailabilityByMentorId = async (req, res) => {
       day: slot.day,
       startTime: slot.startTime,
       endTime: slot.endTime,
+      price: slot.price,
       status: slot.status,
     }));
 

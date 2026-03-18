@@ -220,7 +220,7 @@ return res.status(200).json({
     name: user.name,
     email: user.email,
     userType: user.userType,
-   
+    picture: user.picture || null,
     status: user.status,
     isOnline: user.mentor ? user.mentor.isOnline : false,
 
@@ -289,12 +289,19 @@ const logout = async (req, res) => {
         return res.status(400).json({ status: "fail", message: "User no longer exists" });
       }
 
-      req.user = freshUser;
-      console.log("✅ Authenticated user:", {
+req.user = freshUser;
+
+// Add virtual fields for notifications
+req.user.mentorId = freshUser.mentor?.id || null;
+req.user.menteeId = freshUser.mentee?.id || null;
+
+console.log("✅ Authenticated user:", {
   id: freshUser.id,
   email: freshUser.email,
   userType: freshUser.userType,
   status: freshUser.status,
+  mentorId: req.user.mentorId,
+  menteeId: req.user.menteeId,
 });
       next();
     }catch (error) {

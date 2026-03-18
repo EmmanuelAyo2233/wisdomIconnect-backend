@@ -62,3 +62,10 @@ const ChatAccess = sequelize.define(
 );
 
 module.exports = ChatAccess;
+
+
+
+
+
+
+

@@ -5,6 +5,8 @@ const streamifier = require("streamifier");
 
 // Helper to safely parse JSON or fallback to array
 const safeParseJSON = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value === 'object' && value !== null) return value;
   try {
     return value ? JSON.parse(value) : [];
   } catch {
@@ -39,7 +41,7 @@ const getdetails = async (req, res) => {
       fluentIn: safeParseJSON(extraInfo.fluentIn) || [],
       industries: safeParseJSON(extraInfo.industries) || [],
       experience: safeParseJSON(extraInfo.experience) || [], // array of objects
-      interest: extraInfo.interest || [],
+      interest: safeParseJSON(extraInfo.interest) || safeParseJSON(extraInfo.interests) || [],
       discipline: safeParseJSON(extraInfo.discipline) || [],
       education: safeParseJSON(extraInfo.education) || [],
       yearsOfExperience: extraInfo.yearsOfExperience || 0,
@@ -58,18 +60,7 @@ const getdetails = async (req, res) => {
       message: "Failed to fetch user details",
       error: err.message,
     });
-
-};
-
-  fetch("/api/getdetails", { credentials: "include" })
-  .then(res => res.json())
-  .then(data => {
-    console.log("User data from backend:", data); // 👀 check if picture is correct
-    if (data.picture) {
-      document.getElementById("profileImg").src = data.picture;
-    }
-  });
-
+  }
 };
 
 // --- Update user details ---
@@ -118,13 +109,13 @@ const updateDetails = async (req, res) => {
     mentee.role = body.role || mentee.role;
     mentee.phone = body.phone || mentee.phone;
     mentee.fluentIn = JSON.stringify(body.fluentIn || safeParseJSON(mentee.fluentIn));
-  mentee.interests = JSON.stringify(body.interests || safeParseJSON(mentee.interests));
+    mentee.interest = JSON.stringify(body.interests || safeParseJSON(mentee.interest));
     
     // New fields
     mentee.expertise = JSON.stringify(body.expertise || safeParseJSON(mentee.expertise));
     mentee.industries = JSON.stringify(body.industries || safeParseJSON(mentee.industries));
-   mentee.experience = JSON.stringify(body.experience || safeParseJSON(mentee.experience));
-
+    mentee.experience = JSON.stringify(body.experience || safeParseJSON(mentee.experience));
+    mentee.education = JSON.stringify(body.education || safeParseJSON(mentee.education));
 
     mentee.startDate = body.startDate || mentee.startDate;
     mentee.endDate = body.endDate || mentee.endDate;
@@ -132,8 +123,7 @@ const updateDetails = async (req, res) => {
     await mentee.save();
   }
 }
-console.log("Updating userId:", userId, "userType:", user.userType, "body:", body);
-
+console.log("Updated Mentee Profile for userId:", userId);
 
     return res.status(200).json({
       status: "success",
