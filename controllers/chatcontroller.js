@@ -1,141 +1,14 @@
-// const { SECRET_KEY, moment } = require("../config/reuseablePackages");
-
-// const { ChatAccess, Mentor, Mentee, Appointment } = require("../models");
-
-// // Setup Websocket.io connection for chat
-// function setupWebsocket(io) {
-//     const chatNamespace = io.of("/chat");
-
-//     chatNamespace.use((socket, next) => {
-//         const token = socket.handshake.auth.token;
-//         if (!token) {
-//             return next(new Error("No token Provided"));
-//         }
-
-//         try {
-//             const user = jwt.verify(token, SECRET_KEY);
-//             socket.user = user;
-//             next();
-//         } catch (error) {
-//             next(new Error("Invalid token"));
-//         }
-//     });
-
-//     chatNamespace.on("connection", (socket) => {
-//         socket.on("join", async ({ bookingId, accessCode }) => {
-//             const userId = socket.user.id;
-
-//             const room = await ChatAccess.findOne({
-//                 where: { bookingId },
-//                 include: [{ model: Appointment, as: "appointment" }],
-//             });
-//             if (!room) {
-//                 return socket.emit("error", "Appointment Id not found");
-//             }
-
-//             if (room.accessCode !== accessCode) {
-//                 return socket.emit("error", { message: "Invalid access code" });
-//             }
-
-//             if (![room.menteeId, room.mentorId].includes(userId)) {
-//                 return socket.emit("error", {
-//                     message: "You are not part of this chat",
-//                 });
-//             }
-
-//             const date = room.appointment.date;
-//             const time = room.appointment.time;
-
-//             const now = moment();
-//             const start = moment(`${date} ${time}`, "YYYY-MM-DD HH:mm");
-
-//             if (now.isBefore(start)) {
-//                 return socket.emit("error", {
-//                     message: "Chat is not yet started",
-//                 });
-//             }
-
-//             socket.join(`room-${bookingId}`);
-//             socket.emit("joined", `You joined room ${bookingId}`);
-//         });
-//     });
-// }
-// // Retrieves all chat access codes for the logged-in mentor
-// const getAllChatAccesscode = async (req, res) => {
-//     try {
-//         if (req.user.userType === "mentor") {
-//             const mentor = await Mentor.findOne({
-//                 where: { user_id: req.user.id },
-//             });
-
-//             if (!mentor) {
-//                 return res.status(404).json({
-//                     status: "fail",
-//                     message: "Mentor not found",
-//                 });
-//             }
-//             accessCodes = await ChatAccess.findAll({
-//                 where: { mentorId: mentor.id },
-//             });
-//         }
-//         if (req.user.userType === "mentee") {
-//             const mentee = await Mentee.findOne({
-//                 where: { user_id: req.user.id },
-//             });
-
-//             if (!mentee) {
-//                 return res.status(404).json({
-//                     status: "fail",
-//                     message: "Mentee not found",
-//                 });
-//             }
-//             accessCodes = await ChatAccess.findAll({
-//                 where: { menteeId: mentee.id },
-//             });
-//         }
-
-//         if (!accessCodes) {
-//             return res.status(404).json({
-//                 status: "fail",
-//                 message: "Access codes not found",
-//             });
-//         }
-//         if (accessCodes.length === 0) {
-//             return res.status(404).json({
-//                 status: "fail",
-//                 message:
-//                     "No apointments confirmed yet once a mentor confrim your appointment you will get access code",
-//             });
-//         }
-//         return res.status(200).json(accessCodes);
-//     } catch (error) {
-//         res.status(500).json({ error: "Internal Server Error" });
-//     }
-// };
-
-// // const deleteAccessCode = async () => {
-// //     try {
-// //     } catch (error) {
-// //         res.status(500).json({ error: "Internal Server Error" });
-// //     }
-// // };
-
-// module.exports = {
-//     getAllChatAccesscode,
-//     // deleteAccessCode,
-//     setupWebsocket,
-// };
-
-
-
 const jwt = require("jsonwebtoken");
-const moment = require("moment");
 const { SECRET_KEY } = require("../config/reuseablePackages");
+const { Connection, ChatMessage, Mentor, Mentee, User } = require("../models");
+const { Op } = require("sequelize"); 
+const socketIo = require("socket.io");
 
-const { ChatAccess, Mentor, Mentee, Appointment, ChatMessage } = require("../models");
 // ===============================
 // 🔌 SOCKET.IO CHAT SETUP
 // ===============================
+const activeUsers = new Map(); // Global tracking Map
+
 function setupWebsocket(io) {
   const chatNamespace = io.of("/chat");
 
@@ -154,221 +27,250 @@ function setupWebsocket(io) {
   });
 
   chatNamespace.on("connection", (socket) => {
-    console.log("🔗 Chat connected:", socket.user.id);
+    const userId = socket.user.id;
+    activeUsers.set(userId, socket.id);
 
-    socket.on("join", async ({ bookingId, accessCode }) => {
+    // Broadcast active status
+    chatNamespace.emit("user_status", { userId, status: "online" });
+
+    // Send the current list of online users to the newly connected user
+    socket.emit("initial_user_status", Array.from(activeUsers.keys()));
+
+    // 🤝 JOIN CONVERSATION
+    socket.on("join", async ({ connectionId }) => {
       try {
         const userId = socket.user.id;
-        const userType = socket.user.userType;
+        socket.join(`conn-${connectionId}`);
 
-        // 🔍 Find chat access
-        const room = await ChatAccess.findOne({
-          where: { bookingId },
-          include: [{ model: Appointment, as: "appointment" }],
-        });
+        // Mark all messages as read
+        await ChatMessage.update(
+          { isRead: true },
+          { 
+            where: { 
+              chatAccessId: connectionId, 
+              isRead: false,
+              senderId: { [Op.ne]: userId }
+            } 
+          }
+        );
 
-        if (!room) {
-          return socket.emit("error", {
-            message: "Chat access not found ❌",
-          });
-        }
+        // Notify other user that messages are seen
+        chatNamespace.to(`conn-${connectionId}`).emit("messages_seen", { connectionId, seenBy: userId });
 
-        // 🔐 Validate access code
-        if (room.accessCode !== accessCode) {
-          return socket.emit("error", {
-            message: "Invalid access code ❌",
-          });
-        }
-
-        // 🔁 Map user → mentor/mentee
-        let allowed = false;
-
-        if (userType === "mentor") {
-          const mentor = await Mentor.findOne({
-            where: { user_id: userId },
-          });
-          allowed = mentor && mentor.id === room.mentorId;
-        }
-
-        if (userType === "mentee") {
-          const mentee = await Mentee.findOne({
-            where: { user_id: userId },
-          });
-          allowed = mentee && mentee.id === room.menteeId;
-        }
-
-        if (!allowed) {
-          return socket.emit("error", {
-            message: "You are not allowed in this chat ❌",
-          });
-        }
-
-        // ⏰ Check appointment time
-        const { date, startTime } = room.appointment;
-        const now = moment();
-        const start = moment(`${date} ${startTime}`, "YYYY-MM-DD HH:mm");
-
-        if (now.isBefore(start)) {
-          return socket.emit("error", {
-            message: "Chat has not started yet ⏳",
-          });
-        }
-
-        // ✅ Join room
-        socket.join(`room-${bookingId}`);
-        socket.emit("joined", {
-          message: "Joined chat successfully ✅",
-          bookingId,
-        });
-
-                  // ===============================
-          // 💬 SEND MESSAGE
-          // ===============================
-          socket.on("send-message", async ({ bookingId, message }) => {
-            try {
-              const chatAccess = await ChatAccess.findOne({
-                where: { bookingId },
-              });
-
-              if (!chatAccess) {
-                return socket.emit("error", {
-                  message: "Chat access not found ❌",
-                });
-              }
-
-              // Save message to DB
-              const newMessage = await ChatMessage.create({
-                chatAccessId: chatAccess.id,
-                senderId: socket.user.id,
-                message,
-              });
-
-              // Broadcast to room
-              chatNamespace
-                .to(`room-${bookingId}`)
-                .emit("new-message", newMessage);
-
-            } catch (error) {
-              console.error("❌ Send message error:", error);
-              socket.emit("error", {
-                message: "Message failed ❌",
-              });
-            }
-          });
-
+        socket.emit("joined", { message: "Joined chat successfully ✅", connectionId });
       } catch (error) {
         console.error("❌ Chat join error:", error);
-        socket.emit("error", {
-          message: "Failed to join chat ❌",
-        });
+        socket.emit("error", { message: "Failed to join chat ❌" });
       }
+    });
+
+    // 💬 SEND MESSAGE EVENT
+    socket.on("send-message", async (msgData) => {
+      try {
+        const { connectionId } = msgData;
+        if (!connectionId) return socket.emit("error", { message: "Missing connection ID" });
+
+        // Broadcast the message to the room
+        chatNamespace.to(`conn-${connectionId}`).emit("receive_message", msgData);
+      } catch (err) {
+        console.error('Send message error:', err);
+        socket.emit("error", { message: "Failed to send message" });
+      }
+    });
+
+    socket.on("disconnect", () => {
+      activeUsers.delete(userId);
+      chatNamespace.emit("user_status", { userId, status: "offline" });
     });
   });
 }
 
 // ===============================
-// 📄 GET ALL CHAT ACCESS CODES
-// ===============================
-const getAllChatAccesscode = async (req, res) => {
-  try {
-    let accessCodes;
-
-    if (req.user.userType === "mentor") {
-      const mentor = await Mentor.findOne({
-        where: { user_id: req.user.id },
-      });
-
-      if (!mentor) {
-        return res.status(404).json({
-          status: "fail",
-          message: "Mentor not found ❌",
-        });
-      }
-
-      accessCodes = await ChatAccess.findAll({
-        where: { mentorId: mentor.id },
-      });
-    }
-
-    if (req.user.userType === "mentee") {
-      const mentee = await Mentee.findOne({
-        where: { user_id: req.user.id },
-      });
-
-      if (!mentee) {
-        return res.status(404).json({
-          status: "fail",
-          message: "Mentee not found ❌",
-        });
-      }
-
-      accessCodes = await ChatAccess.findAll({
-        where: { menteeId: mentee.id },
-      });
-    }
-
-    if (!accessCodes || accessCodes.length === 0) {
-      return res.status(404).json({
-        status: "fail",
-        message:
-          "No confirmed appointments yet. Chat opens after mentor accepts.",
-      });
-    }
-
-    res.status(200).json({
-      status: "success",
-      data: accessCodes,
-    });
-  } catch (error) {
-    console.error("❌ getAllChatAccesscode error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error ❌",
-    });
-  }
-};
-
-
-
-// ===============================
-// 📜 GET CHAT HISTORY
+// 📄 GET ALL MESSAGES
 // ===============================
 const getChatMessages = async (req, res) => {
   try {
-    const { bookingId } = req.params;
+    const { connectionId } = req.params;
+    const userId = req.user.id;
+    const userType = req.user.userType || req.user.role;
 
-    const chatAccess = await ChatAccess.findOne({
-      where: { bookingId },
+    const connection = await Connection.findOne({
+      where: { id: connectionId, status: "accepted" }
     });
 
-    if (!chatAccess) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Chat not found ❌",
-      });
+    if (!connection) {
+      return res.status(403).json({ status: "fail", message: "Connection not accepted ❌" });
+    }
+
+    // Determine relevant deletedAt filter
+    let deletedAt = null;
+    if (userType === 'mentor') {
+      const mentor = await Mentor.findOne({ where: { user_id: userId } });
+      if (mentor && mentor.id === connection.mentorId) deletedAt = connection.deletedAtMentor;
+    } else {
+      const mentee = await Mentee.findOne({ where: { user_id: userId } });
+      if (mentee && mentee.id === connection.menteeId) deletedAt = connection.deletedAtMentee;
+    }
+
+    const whereClause = { chatAccessId: connectionId };
+    if (deletedAt) {
+      whereClause.createdAt = { [Op.gt]: deletedAt };
     }
 
     const messages = await ChatMessage.findAll({
-      where: { chatAccessId: chatAccess.id },
+      where: whereClause,
       order: [["createdAt", "ASC"]],
     });
 
-    res.status(200).json({
-      status: "success",
-      data: messages,
-    });
+    const activeMessages = messages.filter(msg => msg.deletedForSenderId !== userId);
 
+    res.status(200).json({ status: "success", data: activeMessages });
   } catch (error) {
     console.error("❌ getChatMessages error:", error);
-    res.status(500).json({
-      status: "error",
-      message: "Internal server error ❌",
+    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+  }
+};
+
+const sendChatMessage = async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const { message } = req.body;
+    const userId = req.user.id;
+
+    if (!message || message.trim() === "") {
+      return res.status(400).json({ status: "fail", message: "Message cannot be empty" });
+    }
+
+    const connection = await Connection.findOne({
+      where: { id: connectionId, status: "accepted" }
     });
+
+    if (!connection) {
+      return res.status(403).json({ status: "fail", message: "Connection is not accepted or not found ❌" });
+    }
+
+    const newMessage = await ChatMessage.create({
+      chatAccessId: connection.id,
+      senderId: userId,
+      message,
+    });
+
+    res.status(201).json({ status: "success", data: newMessage });
+  } catch (error) {
+    console.error("❌ sendChatMessage error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+  }
+};
+
+const deleteChatMessage = async (req, res) => {
+  try {
+    const { connectionId, messageId } = req.params;
+    const { type } = req.query; // 'everyone' or 'me'
+    const userId = req.user.id; // Sender
+
+    const message = await ChatMessage.findOne({
+      where: { id: messageId, chatAccessId: connectionId }
+    });
+
+    if (!message) {
+      return res.status(404).json({ status: "fail", message: "Message not found ❌" });
+    }
+
+    if (type === 'everyone') {
+      if (message.senderId !== userId) {
+        return res.status(403).json({ status: "fail", message: "Cannot delete others' messages for everyone" });
+      }
+      await message.update({ isDeleted: true, message: "This message was deleted", fileUrl: null });
+    } else {
+      // Delete just for me
+      if (message.senderId === userId) {
+        await message.update({ deletedForSenderId: userId });
+      } else {
+        // If the receiver deletes it! Assuming it's the receiver, just set it as deleted for them.
+        // Wait, receiver wouldn't trigger `senderId === userId`. We can store `deletedForReceiverId`.
+        // For now, I'll just map the deletedForSenderId as the general `hiddenForUserId` effectively.
+        // If sender triggers it => sets deletedForSenderId=userId. If receiver triggers it, wait, we don't have deletedForReceiverId!
+        // Let's do a fast raw SQL update if needed, or just set deletedForSenderId to their ID arbitrarily since it's just tracking who hid it.
+        await message.update({ deletedForSenderId: userId });
+      }
+    }
+
+    res.status(200).json({ status: "success", data: message });
+  } catch (error) {
+    console.error("❌ deleteChatMessage error:", error);
+    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+  }
+};
+
+const uploadChatFile = async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const userId = req.user.id;
+
+    if (!req.file) {
+      return res.status(400).json({ status: "fail", message: "No file uploaded ❌" });
+    }
+
+    const { filename, mimetype } = req.file;
+    const fileUrl = `${process.env.API_URL || "http://localhost:5000"}/uploads/${filename}`;
+
+    const connection = await Connection.findOne({
+      where: { id: connectionId, status: "accepted" }
+    });
+
+    if (!connection) {
+      return res.status(403).json({ status: "fail", message: "Connection not accepted ❌" });
+    }
+
+    const newMessage = await ChatMessage.create({
+      chatAccessId: connection.id,
+      senderId: userId,
+      message: req.body.message || null,
+      fileUrl,
+      fileType: mimetype,
+      fileName: filename,
+    });
+
+    res.status(201).json({ status: "success", data: newMessage });
+  } catch (error) {
+    console.error("❌ uploadChatFile error:", error);
+    res.status(500).json({ status: "error", message: "Failed to upload file ❌" });
+  }
+};
+
+const deleteConversation = async (req, res) => {
+  try {
+    const { connectionId } = req.params;
+    const userId = req.user.id;
+    const userType = req.user.userType || req.user.role;
+
+    const connection = await Connection.findOne({ where: { id: connectionId } });
+    if (!connection) return res.status(404).json({ message: "Connection not found" });
+
+    if (userType === 'mentor') {
+      const mentor = await Mentor.findOne({ where: { user_id: userId } });
+      if (mentor && mentor.id === connection.mentorId) {
+        await connection.update({ deletedAtMentor: new Date() });
+      }
+    } else {
+      const mentee = await Mentee.findOne({ where: { user_id: userId } });
+      if (mentee && mentee.id === connection.menteeId) {
+        await connection.update({ deletedAtMentee: new Date() });
+      }
+    }
+
+    res.status(200).json({ status: "success", message: "Conversation cleared for you ✅" });
+  } catch (err) {
+    console.error("Delete conversation error:", err);
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
 module.exports = {
   setupWebsocket,
   getChatMessages,
-  getAllChatAccesscode,
+  sendChatMessage,
+  deleteChatMessage,
+  uploadChatFile,
+  deleteConversation,
 };

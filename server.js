@@ -1,4 +1,7 @@
 require("dotenv").config();
+const { db } = require("./models");
+
+
 const {
     PORT,
     express,
@@ -43,7 +46,9 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // --- Global Middleware ---
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: false,
+}));
 app.use(express.json());
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: true }));
@@ -85,6 +90,9 @@ app.use(`${API_URL}/availability`, availabilityRoutes);
 
 const notificationRoutes = require("./routes/notificationRoutes");
 app.use(`${API_URL}/notifications`, notificationRoutes);
+
+const connectionRoutes = require("./routes/connectionRoutes");
+app.use(`${API_URL}/connections`, connectionRoutes);
 
 app.get("/test-notifications", (req, res) => {
   res.json({ message: "Notifications route is alive ✅" });

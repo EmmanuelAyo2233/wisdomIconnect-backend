@@ -15,7 +15,7 @@ const ChatMessage = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: "chataccess",
+        model: "connection",
         key: "id",
       },
       onDelete: "CASCADE",
@@ -35,7 +35,37 @@ const ChatMessage = sequelize.define(
 
     message: {
       type: DataTypes.TEXT,
-      allowNull: false,
+      allowNull: true,
+    },
+
+    fileUrl: {
+      type: DataTypes.STRING(500),
+      allowNull: true,
+    },
+    
+    fileType: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    
+    fileName: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    
+    isRead: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+    
+    isDeleted: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
+
+    deletedForSenderId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
     },
   },
   {

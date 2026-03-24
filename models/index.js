@@ -11,11 +11,11 @@ const User = require("./user");
 const Mentee = require("./mentee");
 const Mentor = require("./mentor");
 const Appointment = require("./appointment");
-const ChatAccess = require("./chataccess");
 const ChatMessage = require("./chatmessage");
 const Comment = require("./comment");
 const Post = require("./post");
 const Availability = require("./availability");
+const Connection = require("./connection");
 
 let sequelize;
 if (config.use_env_variable) {
@@ -62,28 +62,22 @@ Mentee.belongsTo(User, { foreignKey: "user_id", as: "user" });
 // Mentor.hasMany(Appointment, { foreignKey: "mentorId", as: "appointment" });
 // Appointment.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
 
+Mentor.hasMany(Connection, { foreignKey: "mentorId", as: "connections" });
+Connection.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
+
+Mentee.hasMany(Connection, { foreignKey: "menteeId", as: "connections" });
+Connection.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
+
 // Mentee.hasMany(Appointment, { foreignKey: "menteeId", as: "appointment" });
 // Appointment.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
 
-Mentor.hasMany(ChatAccess, { foreignKey: "mentorId", as: "chatAccesses" });
-ChatAccess.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
-
-Mentee.hasMany(ChatAccess, { foreignKey: "menteeId", as: "chatAccesses" });
-ChatAccess.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
-
-Appointment.hasOne(ChatAccess, { foreignKey: "bookingId", as: "chatAccess" });
-ChatAccess.belongsTo(Appointment, {
-    foreignKey: "bookingId",
-    as: "appointment",
-});
-
-ChatAccess.hasMany(ChatMessage, {
+Connection.hasMany(ChatMessage, {
     foreignKey: "chatAccessId",
     as: "chatMessage",
 });
-ChatMessage.belongsTo(ChatAccess, {
+ChatMessage.belongsTo(Connection, {
     foreignKey: "chatAccessId",
-    as: "chatAccess",
+    as: "connection",
 });
 
 User.hasMany(ChatMessage, { foreignKey: "senderId", as: "sentMessages" });
@@ -107,9 +101,9 @@ module.exports = {
     Mentee,
     Mentor,
     Appointment,
-    ChatAccess,
     ChatMessage,
     Post,
     Comment,
     Availability,
+    Connection,
 };

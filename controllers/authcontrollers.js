@@ -7,6 +7,8 @@
     SECRET_KEY,
     jwt,
     Op,
+    streamFier,
+    cloudinary
   } = require("../config/reuseablePackages");
 
   // ------- helpers -------
@@ -81,26 +83,43 @@
           return res.status(400).json({ status: "fail", message: "Select up to 3 expertise topics" });
         }
 
+        // Handle file upload if present
+        let certUrl = null;
+        if (req.file) {
+          certUrl = await new Promise((resolve, reject) => {
+            const stream = cloudinary.uploader.upload_stream(
+              { folder: "wisdom_connect_credentials" },
+              (err, result) => {
+                if (err) reject(err);
+                else resolve(result.secure_url);
+              }
+            );
+            streamFier.createReadStream(req.file.buffer).pipe(stream);
+          });
+        }
+
         // Create user with pending status (mentor verification)
-       
-      const newUser = await User.create({
-        name: b.name,
-        email: b.email,
-        password: hashedPassword,
-        userType: "mentor",
-        status: "pending", // pending approval
-      });
+        const newUser = await User.create({
+          name: b.name,
+          email: b.email,
+          password: hashedPassword,
+          userType: "mentor",
+          status: "pending", // pending approval
+        });
 
-     const shortBio = b.shortBio || b.bio || null;
+        const shortBio = b.shortBio || b.bio || null;
 
-    const mentor = await Mentor.create({
-      user_id: newUser.id,
-      yearsOfExperience: b.yearsOfExperience || 0,
-      bio: shortBio,   // ✅ correct column
-      expertise: JSON.stringify(expertise),
-      linkedinUrl: b.linkedinUrl || null,
-    });
+        if (certUrl) {
+            expertise.push(`CERTIFICATE_URL_${certUrl}`);
+        }
 
+        const mentor = await Mentor.create({
+          user_id: newUser.id,
+          yearsOfExperience: b.yearsOfExperience || b.experience || 0,
+          bio: shortBio,   // ✅ correct column
+          expertise: JSON.stringify(expertise),
+          linkedinUrl: b.linkedinUrl || null,
+        });
 
       const userResponse = newUser.get({ plain: true });
       delete userResponse.password;
@@ -273,6 +292,7 @@ const logout = async (req, res) => {
 
 
       const tokenDetails = jwt.verify(idToken, SECRET_KEY);
+      console.log("AUTH DEBUG tokenDetails:", tokenDetails);
 
       const freshUser = await User.findOne({
         where: {
@@ -284,6 +304,7 @@ const logout = async (req, res) => {
         ],
         attributes: { exclude: ["password"] },
       });
+      console.log("AUTH DEBUG freshUser:", freshUser ? "FOUND" : "NOT FOUND");
 
       if (!freshUser) {
         return res.status(400).json({ status: "fail", message: "User no longer exists" });
@@ -308,7 +329,7 @@ console.log("✅ Authenticated user:", {
   console.error("JWT verification error:", error); // 🔍 log full error
   return res.status(401).json({
     status: "fail",
-    message: error.message, // send actual error message (optional)
+    message: "JWT: " + error.message, // send actual error message (optional)
   });
 }
   };

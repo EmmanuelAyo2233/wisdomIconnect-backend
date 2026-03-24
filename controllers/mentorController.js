@@ -16,6 +16,16 @@ const getAllMentors = async (req, res) => {
       ],
     });
 
+    // safe parser helper
+    const safeParse = (val) => {
+       if (!val) return [];
+       if (Array.isArray(val)) return val;
+       if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch(e) { return [val]; }
+       }
+       return [];
+    };
+
     const formatted = mentors.map((m) => ({
       id: m.id,
       user_id: m.user_id,
@@ -26,7 +36,7 @@ const getAllMentors = async (req, res) => {
    picture: m.user?.picture || "http://localhost:5000/uploads/default.png",
 },
 
-      expertise: m.expertise ? JSON.parse(m.expertise) : [],
+      expertise: safeParse(m.expertise),
       yearsOfExperience: m.yearsOfExperience || 0,
       attendance: m.attendance || "0%",
       sessions: m.sessions || 0,
@@ -84,12 +94,21 @@ const getMentorsDetails = async (req, res) => {
     //   ],
     // });
 
+    const safeParse = (val) => {
+       if (!val) return [];
+       if (Array.isArray(val)) return val;
+       if (typeof val === 'string') {
+          try { return JSON.parse(val); } catch(e) { return [val]; }
+       }
+       return [];
+    };
+
     const profile = {
       id: mentor.id,
       user_id: mentor.user_id,
       name: mentor.user?.name || "Unknown",
       email: mentor.user?.email || "",
-      picture: mentor.user?.picture || "images/default-avatar.png",
+      picture: mentor.user?.picture || "http://localhost:5000/uploads/default.png",
       status: mentor.user?.status || "",
       userType: mentor.user?.userType || "",
       linkedinUrl: mentor.linkedinUrl || "",
@@ -97,11 +116,11 @@ const getMentorsDetails = async (req, res) => {
       countryCode: mentor.user?.countryCode || "NG",
       role: mentor.role || "", // ✅ role comes from mentor table
       bio: mentor.bio || "",
-      expertise: mentor.expertise ? JSON.parse(mentor.expertise) : [],
-      discipline: mentor.discipline ? JSON.parse(mentor.discipline) : [],
-      fluentIn: mentor.fluentIn ? JSON.parse(mentor.fluentIn) : [],
-      education: mentor.education ? JSON.parse(mentor.education) : [],
-      experience: mentor.experience ? JSON.parse(mentor.experience) : [],
+      expertise: safeParse(mentor.expertise),
+      discipline: safeParse(mentor.discipline),
+      fluentIn: safeParse(mentor.fluentIn),
+      education: safeParse(mentor.education),
+      experience: safeParse(mentor.experience),
       experienceDescription: mentor.experienceDescription || "",
       yearsOfExperience: mentor.yearsOfExperience || 0,
       attendance: mentor.attendance || "0%",

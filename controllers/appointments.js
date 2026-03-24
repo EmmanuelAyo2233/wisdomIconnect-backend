@@ -60,6 +60,32 @@ exports.bookAppointment = async (req, res) => {
       });
     }
 
+    // ⛔ Extra Validation: Prevent same mentee booking overlapping slots
+    const existingMenteeBooking = await Appointment.findOne({
+      where: { menteeId: mentee.id, date, startTime, endTime }
+    });
+    if (existingMenteeBooking) {
+      return res.status(400).json({ status: "fail", message: "You have already booked a session for this exact time ❌" });
+    }
+
+    // ⛔ Extra Validation: Prevent duplicate overall bookings for mentor slot
+    const existingSlotBooking = await Appointment.findOne({
+      where: { mentorId: mentor.id, date, startTime, endTime }
+    });
+    if (existingSlotBooking) {
+      return res.status(400).json({ status: "fail", message: "This slot was just booked by someone else! Please pick another time ❌" });
+    }
+
+    // ⛔ Date Validation: Must be future date
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const bookingDate = new Date(date);
+    bookingDate.setHours(0, 0, 0, 0);
+
+    if (bookingDate.getTime() <= today.getTime()) {
+      return res.status(400).json({ status: "fail", message: "Bookings must be strictly for future dates ❌" });
+    }
+
     // ✅ Create appointment
     const appointment = await Appointment.create({
       mentorId: mentor.id,
@@ -87,8 +113,25 @@ await Notification.create({
   isRead: false,
 });
 
+// ✅ Auto-create accepted connection
+const Connection = require("../models/connection"); // Using this at the top logically, but we can do db.Connection.
+// Actually, I'll require it here since I didn't require it explicitly at the top.
+const ConnectionModel = require("../models/connection");
 
+const existingConn = await ConnectionModel.findOne({
+  where: { mentorId: mentor.id, menteeId: mentee.id }
+});
 
+if (!existingConn) {
+  await ConnectionModel.create({
+    mentorId: mentor.id,
+    menteeId: mentee.id,
+    status: "accepted"
+  });
+} else if (existingConn.status !== "accepted") {
+  existingConn.status = "accepted";
+  await existingConn.save();
+}
     res.status(201).json({
       status: "success",
       message: "Appointment booked successfully ✅ Slot marked as booked 🔔",
@@ -358,6 +401,15 @@ exports.rejectAppointment = async (req, res) => {
     appointment.status = "rejected";
     await appointment.save();
 
+    await Notification.create({
+      receiverId: appointment.menteeId,
+      receiverType: "mentee",
+      senderId: mentor.id,
+      message: "❌ Your appointment was declined by the mentor.",
+      type: "booking",
+      isRead: false,
+    });
+
     res.status(200).json({ status: "success", message: "Appointment rejected ✅", data: appointment });
   } catch (error) {
     console.error("❌ Reject appointment error:", error);
@@ -386,6 +438,15 @@ exports.mentorRescheduleAppointment = async (req, res) => {
     appointment.status = "mentor-rescheduled";
 
     await appointment.save();
+
+    await Notification.create({
+      receiverId: appointment.menteeId,
+      receiverType: "mentee",
+      senderId: mentor.id,
+      message: `🔄 Your appointment was rescheduled to ${appointment.date} at ${appointment.startTime}. Reason: ${appointment.rescheduleReason}`,
+      type: "update",
+      isRead: false,
+    });
 
     res.status(200).json({ status: "success", message: "Appointment rescheduled ✅", data: appointment });
   } catch (error) {

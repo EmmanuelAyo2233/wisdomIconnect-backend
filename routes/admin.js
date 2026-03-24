@@ -1,8 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
+const { authentication, restrictTo } = require("../controllers/authcontrollers");
 
 // Admin routes
+router.use(authentication);
+router.use(restrictTo("admin"));
+
+router.get("/users", adminController.getAllUsers);
 router.get("/pending-mentors", adminController.getPendingMentors);
 router.put("/approve-mentor/:id", adminController.approveMentor);
 router.put("/reject-mentor/:id", adminController.rejectMentor);

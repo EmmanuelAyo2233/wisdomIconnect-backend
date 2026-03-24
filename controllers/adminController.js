@@ -3,6 +3,27 @@ const User = require("../models/user");
 const Mentor = require("../models/mentor");
 const Mentee = require("../models/mentee");
 
+// --- Get all users
+exports.getAllUsers = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      order: [["createdAt", "DESC"]],
+    });
+    const rows = users.map(u => ({
+      id: u.id,
+      firstName: u.name.split(' ')[0] || '',
+      lastName: u.name.split(' ').slice(1).join(' ') || '',
+      email: u.email,
+      role: u.userType.charAt(0).toUpperCase() + u.userType.slice(1),
+      isVerified: u.status === 'approved' || (u.userType === 'admin'),
+      createdAt: u.createdAt
+    }));
+    res.json({ users: rows });
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
 // --- Stats
 exports.getStats = async (req, res) => {
   try {
@@ -51,11 +72,20 @@ exports.getPendingMentors = async (req, res) => {
 
       // If expertise stored as JSON string, try to parse; otherwise leave as-is
       let expertise = m.expertise ?? null;
+      let certUrl = null;
+
       if (typeof expertise === "string") {
         try { expertise = JSON.parse(expertise); } catch { /* keep string */ }
       }
-      // Make expertise display-friendly (comma list) if array
-      if (Array.isArray(expertise)) expertise = expertise.join(", ");
+      
+      if (Array.isArray(expertise)) {
+        const certEntry = expertise.find(e => typeof e === 'string' && e.startsWith('CERTIFICATE_URL_'));
+        if (certEntry) {
+           certUrl = certEntry.replace('CERTIFICATE_URL_', '');
+           expertise = expertise.filter(e => e !== certEntry);
+        }
+        expertise = expertise.join(", ");
+      }
 
       return {
         id: plainU.id,
@@ -65,6 +95,7 @@ exports.getPendingMentors = async (req, res) => {
         experience: m.yearsOfExperience || null,
         bio: m.bio || null,
         linkedin: m.linkedinUrl || null,
+        certificateUrl: certUrl,
         status: plainU.status || null,
       };
     });
@@ -176,10 +207,20 @@ exports.getApprovedMentors = async (req, res) => {
       const m = plainU.Mentor || plainU.mentor || {};
 
       let expertise = m.expertise ?? null;
+      let certUrl = null;
+      
       if (typeof expertise === "string") {
         try { expertise = JSON.parse(expertise); } catch { /* leave as string */ }
       }
-      if (Array.isArray(expertise)) expertise = expertise.join(", ");
+      
+      if (Array.isArray(expertise)) {
+        const certEntry = expertise.find(e => typeof e === 'string' && e.startsWith('CERTIFICATE_URL_'));
+        if (certEntry) {
+           certUrl = certEntry.replace('CERTIFICATE_URL_', '');
+           expertise = expertise.filter(e => e !== certEntry);
+        }
+        expertise = expertise.join(", ");
+      }
 
       return {
         id: plainU.id,
@@ -189,8 +230,9 @@ exports.getApprovedMentors = async (req, res) => {
         experience: m.yearsOfExperience || null,
         bio: m.bio || null,
         linkedin: m.linkedinUrl || null,
+        certificateUrl: certUrl || null,
         status: plainU.status || null,
-       approvedDate: plainU.approvedAt || null// you can use updatedAt as approved date
+        approvedDate: plainU.approvedAt || plainU.updatedAt || null
       };
     });
 
@@ -240,10 +282,20 @@ exports.getRejectedMentors = async (req, res) => {
       const m = plainU.Mentor || plainU.mentor || {};
 
       let expertise = m.expertise ?? null;
+      let certUrl = null;
+      
       if (typeof expertise === "string") {
         try { expertise = JSON.parse(expertise); } catch { /* leave string */ }
       }
-      if (Array.isArray(expertise)) expertise = expertise.join(", ");
+      
+      if (Array.isArray(expertise)) {
+        const certEntry = expertise.find(e => typeof e === 'string' && e.startsWith('CERTIFICATE_URL_'));
+        if (certEntry) {
+           certUrl = certEntry.replace('CERTIFICATE_URL_', '');
+           expertise = expertise.filter(e => e !== certEntry);
+        }
+        expertise = expertise.join(", ");
+      }
 
       return {
         id: plainU.id,
@@ -253,6 +305,7 @@ exports.getRejectedMentors = async (req, res) => {
         experience: m.yearsOfExperience || null,
         bio: m.bio || null,
         linkedin: m.linkedinUrl || null,
+        certificateUrl: certUrl || null,
         status: plainU.status || null,
         rejectedDate: plainU.updatedAt || null
       };

@@ -11,12 +11,15 @@ exports.createAvailability = async (req, res) => {
       return res.status(400).json({ message: "Please provide date, startTime, and endTime ❌" });
     }
 
+    // ⛔ Date Validation Strict (Future Dates ONLY)
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(date);
+    selectedDate.setHours(0, 0, 0, 0);
 
     // ⛔ Block past or current dates
-    if (selectedDate <= today.setHours(0, 0, 0, 0)) {
-      return res.status(400).json({ message: "You cannot set availability for today or past dates ❌" });
+    if (selectedDate.getTime() <= today.getTime()) {
+      return res.status(400).json({ message: "Availability must be set strictly for future dates! ❌" });
     }
 
     // ⛔ Prevent duplicate slots (same date & time for same mentor)
@@ -152,7 +155,11 @@ exports.getAvailabilityByMentorId = async (req, res) => {
     });
 
     if (!slots.length) {
-      return res.status(404).json({ message: "No slots found ❌" });
+      return res.status(200).json({ 
+        status: "success", 
+        message: "No slots found", 
+        data: [] 
+      });
     }
 
     // 🧠 Get today's date for filtering
@@ -167,7 +174,11 @@ exports.getAvailabilityByMentorId = async (req, res) => {
     });
 
     if (!availableFutureSlots.length) {
-      return res.status(404).json({ message: "No available future slots found ❌" });
+      return res.status(200).json({ 
+        status: "success", 
+        message: "No available future slots found", 
+        data: [] 
+      });
     }
 
     // ✅ Format for frontend display

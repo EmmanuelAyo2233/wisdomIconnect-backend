@@ -1,8 +1,8 @@
 const sequelize = require("../config/db");
 const { DataTypes } = require("../config/reuseablePackages");
 
-const ChatAccess = sequelize.define(
-    "chataccess",
+const Connection = sequelize.define(
+    "connection",
     {
         id: {
             type: DataTypes.INTEGER,
@@ -10,15 +10,11 @@ const ChatAccess = sequelize.define(
             autoIncrement: true,
             allowNull: false,
         },
-        accessCode: {
-            type: DataTypes.STRING,
-            allowNull: false,
-        },
         mentorId: {
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {
-                model: "mentor", // ✅ should match table name in DB
+                model: "mentor",
                 key: "id",
             },
             onDelete: "CASCADE",
@@ -28,44 +24,31 @@ const ChatAccess = sequelize.define(
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {
-                model: "mentee", // ✅ should match table name in DB
+                model: "mentee",
                 key: "id",
             },
             onDelete: "CASCADE",
             onUpdate: "CASCADE",
         },
-        bookingId: {
-            type: DataTypes.INTEGER,
-            allowNull: false,
-            references: {
-                model: "appointment", // ✅ DataTypes pluralizes table names by default
-                key: "id",
-            },
-            onDelete: "CASCADE",
-            onUpdate: "CASCADE",
+        status: {
+            type: DataTypes.ENUM("pending", "accepted", "rejected"),
+            defaultValue: "pending",
         },
-        createdAt: {
+        deletedAtMentor: {
             type: DataTypes.DATE,
             allowNull: true,
         },
-        updatedAt: {
+        deletedAtMentee: {
             type: DataTypes.DATE,
             allowNull: true,
         },
     },
     {
         freezeTableName: true,
-        modelName: "chataccess",
-        tableName: "chataccess",
+        modelName: "connection",
+        tableName: "connection",
         timestamps: true,
     }
 );
 
-module.exports = ChatAccess;
-
-
-
-
-
-
-
+module.exports = Connection;
