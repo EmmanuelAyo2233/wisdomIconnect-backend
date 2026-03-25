@@ -16,6 +16,7 @@ const Comment = require("./comment");
 const Post = require("./post");
 const Availability = require("./availability");
 const Connection = require("./connection");
+const Playbook = require("./playbook");
 
 let sequelize;
 if (config.use_env_variable) {
@@ -95,6 +96,9 @@ Availability.belongsTo(User, { foreignKey: "mentorId", as: "mentorUser" });
 Post.hasMany(Comment, { foreignKey: "postId", as: "comment" });
 Comment.belongsTo(Post, { foreignKey: "postId", as: "post" });
 
+User.hasMany(Playbook, { foreignKey: "mentor_id", as: "playbooks" });
+Playbook.belongsTo(User, { foreignKey: "mentor_id", as: "mentor" });
+
 module.exports = {
     db,
     User,
@@ -106,4 +110,5 @@ module.exports = {
     Comment,
     Availability,
     Connection,
+    Playbook,
 };

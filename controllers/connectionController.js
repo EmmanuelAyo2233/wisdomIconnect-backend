@@ -10,10 +10,10 @@ exports.requestConnection = async (req, res) => {
     const menteeUserId = req.user.id;
 
     const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
-    if (!mentor) return res.status(404).json({ message: "Mentor not found ❌" });
+    if (!mentor) return res.status(400).json({ message: "Mentor profile not found for this user ❌" });
 
     const mentee = await Mentee.findOne({ where: { user_id: menteeUserId } });
-    if (!mentee) return res.status(404).json({ message: "Mentee not found ❌" });
+    if (!mentee) return res.status(400).json({ message: "Mentee profile not found. Please complete your profile first ❌" });
 
     // Check if connection already exists
     let connection = await Connection.findOne({
