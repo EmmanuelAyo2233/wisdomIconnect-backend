@@ -10,6 +10,13 @@ const {
     deletePlaybook,
     updatePlaybook, // new
     likePlaybook,
+    savePlaybook,
+    getSavedPlaybooks,
+    addPlaybookComment,
+    getPlaybookComments,
+    updatePlaybookComment,
+    deletePlaybookComment,
+    getPlaybookReplies,
 } = require("../controllers/playbookController");
 
 const router = express.Router();
@@ -32,7 +39,16 @@ router.put("/:id/approve", authentication, restrictTo("admin"), approvePlaybook)
 // Admin or Owner routes
 router.delete("/:id", authentication, deletePlaybook);
 
-// Anyone logged in can like a playbook
+// Anyone logged in can like/save a playbook
 router.post("/:id/like", authentication, likePlaybook);
+router.post("/:id/save", authentication, savePlaybook);
+router.get("/user/saved", authentication, getSavedPlaybooks);
+
+// Comments
+router.get("/:id/comments", authentication, getPlaybookComments);
+router.post("/:id/comments", authentication, addPlaybookComment);
+router.get("/:id/comments/:commentId/replies", authentication, getPlaybookReplies);
+router.put("/:id/comments/:commentId", authentication, updatePlaybookComment);
+router.delete("/:id/comments/:commentId", authentication, deletePlaybookComment);
 
 module.exports = router;

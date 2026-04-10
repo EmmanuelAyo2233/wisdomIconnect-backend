@@ -13,6 +13,13 @@ const sequelize = new Sequelize(
       ssl: {
         rejectUnauthorized: true, // some cloud DBs require this
       },
+      connectTimeout: 60000, // Increase connection timeout to 60s
+    },
+    pool: {
+      max: 5,
+      min: 0,
+      acquire: 60000,
+      idle: 10000
     },
     logging: false, // optional
   }
@@ -33,6 +40,9 @@ sequelize
      // New for Connection Deletion History
      sequelize.query("ALTER TABLE connection ADD COLUMN deletedAtMentor DATETIME DEFAULT NULL;").catch(e=>{});
      sequelize.query("ALTER TABLE connection ADD COLUMN deletedAtMentee DATETIME DEFAULT NULL;").catch(e=>{});
+     
+     // New for Topic Management
+     sequelize.query("ALTER TABLE mentor ADD COLUMN topics JSON DEFAULT NULL;").catch(e=>{});
   })
   .catch((err) => console.error("Database connection error:", err));
 

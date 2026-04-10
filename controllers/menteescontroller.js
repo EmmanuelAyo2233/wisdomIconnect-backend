@@ -121,6 +121,82 @@ const getMentorsDetails = async (req, res) => {
   }
 };
 
+const { MentorCommendation } = require("../models");
+
+// ✅ Fetch full details of a specific mentee (for mentor/public view)
+const getMenteeProfileById = async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ status: "fail", message: "Mentee ID is required" });
+
+    // Try finding Mentee by mentee table id, or fallback to user_id
+    let mentee = await Mentee.findOne({
+      where: { id },
+      include: [{ model: User, as: "user", attributes: ["id", "name", "picture", "email", "status", "userType", "countryCode"] }]
+    });
+
+    if (!mentee) {
+      mentee = await Mentee.findOne({
+         where: { user_id: id },
+         include: [{ model: User, as: "user", attributes: ["id", "name", "picture", "email", "status", "userType", "countryCode"] }]
+      });
+    }
+
+    if (!mentee) return res.status(404).json({ status: "fail", message: "Mentee not found" });
+
+    // Appointments fetching for impact data
+    const appointments = await Appointment.findAll({
+      where: { menteeId: mentee.id }
+    });
+
+    let minutesLearned = 0;
+    let completedCount = 0;
+    let scheduledCount = 0;
+
+    appointments.forEach(app => {
+      if (app.status === 'completed' || app.status === 'accepted') scheduledCount++;
+      if (app.status === 'completed') {
+        completedCount++;
+        minutesLearned += 60; // Fixed duration per user request
+      }
+    });
+
+    const attendanceRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
+
+    // Mentor Commendations
+    let commendations = [];
+    try {
+      if (MentorCommendation) {
+         commendations = await MentorCommendation.findAll({
+            where: { menteeId: mentee.id },
+            include: [{ model: Mentor, as: "mentor", include: [{ model: User, as: "user", attributes: ["name", "picture", "id"] }] }],
+            order: [["createdAt", "DESC"]]
+         });
+      }
+    } catch(e) {}
+
+    const profileData = {
+      ...mentee.toJSON(),
+      role: mentee.role || "Mentee",
+      name: mentee.user?.name || "Unknown",
+      picture: mentee.user?.picture || "http://localhost:5000/uploads/default.png",
+      countryCode: mentee.user?.countryCode || "NG",
+      email: mentee.user?.email,
+      impact: {
+        sessionsAttended: completedCount,
+        minutesLearned: minutesLearned,
+        attendanceRate: attendanceRate
+      },
+      commendations
+    };
+
+    res.status(200).json({ status: "success", data: profileData });
+  } catch (err) {
+    console.error("error fetching mentee", err);
+    res.status(500).json({ status: "fail", message: "Server error" });
+  }
+};
+
 
 // Allows a mentee to book an appointment with a mentor
 const bookApppointment = async (req, res) => {
@@ -312,6 +388,7 @@ const deleteAppointment = async (req, res) => {
 module.exports = {
     getAllMentors,
     getMentorsDetails,
+    getMenteeProfileById,
     bookApppointment,
     resceduleAppointment,
     cancelAppointment,

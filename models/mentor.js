@@ -35,6 +35,15 @@ const Mentor = sequelize.define(
             type: DataTypes.STRING,
             allowNull: true,
         },
+        sessionPrice: {
+            type: DataTypes.FLOAT,
+            defaultValue: 0.0,
+            field: "session_price"
+        },
+        default_duration: {
+            type: DataTypes.INTEGER,
+            defaultValue: 30,
+        },
         education: {
             type: DataTypes.JSON,
         },
@@ -76,7 +85,15 @@ const Mentor = sequelize.define(
             type: DataTypes.JSON,
             allowNull: true,
         },
+        industries: {
+            type: DataTypes.JSON,
+            allowNull: true,
+        },
         fluentIn: {
+            type: DataTypes.JSON,
+            allowNull: true,
+        },
+        topics: {
             type: DataTypes.JSON,
             allowNull: true,
         },

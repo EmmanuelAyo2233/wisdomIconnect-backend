@@ -27,6 +27,9 @@ const playbookRoutes = require("./routes/playbookRoutes");
 const commentRoutes = require("./routes/comment");
 const adminRoutes = require("./routes/admin");
 const mentorRoutes = require("./routes/mentor");
+const messageRequestRoutes = require("./routes/messageRequestRoutes");
+const paymentRoutes = require("./routes/paymentRoutes");
+const callRoutes = require("./routes/callRoutes");
 
 // Initialize Express
 const app = express();
@@ -38,6 +41,8 @@ const corsOptions = {
         "http://localhost:5503",
         "http://127.0.0.1:5500",
         "http://localhost:5500",
+        "http://127.0.0.1:5173",
+        "http://localhost:5173",
         FRONTEND_URL,
     ].filter(Boolean),
     credentials: true,
@@ -64,6 +69,8 @@ const io = new Server(server, {
             "http://127.0.0.1:5500",
             "http://127.0.0.1:5000",
             "http://localhost:5000",
+            "http://127.0.0.1:5173",
+            "http://localhost:5173",
             FRONTEND_URL,
         ],
         credentials: true,
@@ -95,6 +102,14 @@ app.use(`${API_URL}/notifications`, notificationRoutes);
 
 const connectionRoutes = require("./routes/connectionRoutes");
 app.use(`${API_URL}/connections`, connectionRoutes);
+app.use(`${API_URL}/message-requests`, messageRequestRoutes);
+
+const sessionRoutes = require("./routes/sessionRoutes");
+app.use(`${API_URL}/sessions`, sessionRoutes);
+
+app.use(`${API_URL}/payments`, paymentRoutes);
+
+app.use(`${API_URL}/call`, callRoutes);
 
 app.get("/test-notifications", (req, res) => {
   res.json({ message: "Notifications route is alive ✅" });
@@ -103,6 +118,10 @@ app.get("/test-notifications", (req, res) => {
 
 // Setup /chat namespace
 setupWebsocket(io);
+
+// Setup call socket
+const { setupCallSocket } = require("./controllers/callSocketController");
+setupCallSocket(io);
 
 // --- Swagger Documentation ---
 autoSwaggerJs({
@@ -129,8 +148,15 @@ autoSwaggerJs({
     },
 });
 
-// --- Start Server ---
-server.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
-    console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
-});
+// --- Synchronize Database & Start Server ---
+db.sequelize.sync() // creates missing tables but avoids complex alterations to existing ones
+    .then(() => {
+        console.log("✅ Database synchronized successfully (Tables created/updated)");
+        server.listen(PORT, () => {
+            console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
+            console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
+        });
+    })
+    .catch((err) => {
+        console.error("❌ Database synchronization failed:", err);
+    });

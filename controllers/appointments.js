@@ -5,6 +5,9 @@ const Mentor = require("../models/mentor");
 const Mentee = require("../models/mentee");
 const Availability = require("../models/availability");
 const User = require("../models/user");
+const Review = require("../models/review");
+const MentorCommendation = require("../models/mentorCommendation");
+const { v4: uuidv4 } = require("uuid");
 
 // =====================
 // 📅 MENTEE ACTIONS
@@ -86,6 +89,21 @@ exports.bookAppointment = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Bookings must be strictly for future dates ❌" });
     }
 
+    // ⛔ Enforce Pricing Validation at Booking
+    const mentorUser = await User.findByPk(mentorUserId);
+    const mentorLevel = mentorUser ? mentorUser.mentorLevel : "starter";
+    const sessionAmount = req.body.amount !== undefined ? Number(req.body.amount) : Number(availabilitySlot.price) || 0;
+
+    if (mentorLevel === "starter" && sessionAmount > 0) {
+      return res.status(400).json({ status: "fail", message: "Starter mentors can only offer free sessions. ❌" });
+    }
+    if (mentorLevel === "verified" && sessionAmount > 20000) {
+      return res.status(400).json({ status: "fail", message: "Verified mentors can charge up to 20,000 max. ❌" });
+    }
+    if (mentorLevel === "gold" && sessionAmount > 50000) {
+      return res.status(400).json({ status: "fail", message: "Gold mentors can charge up to 50,000 max. ❌" });
+    }
+
     // ✅ Create appointment
     const appointment = await Appointment.create({
       mentorId: mentor.id,
@@ -103,15 +121,60 @@ exports.bookAppointment = async (req, res) => {
       availabilitySlot.update({ status: "booked" }),
       appointment.update({ slotId: availabilitySlot.id }),
     ]);
+
+    // ✅ Payment Logic (Pending at booking)
+    if (sessionAmount > 0) {
+      if (!req.body.reference) {
+         // Rolling back appointment and slot Since payment failed
+         await appointment.destroy();
+         await availabilitySlot.update({ status: "available" });
+         return res.status(400).json({ status: "fail", message: "Payment reference is required for paid sessions ❌" });
+      }
+
+      const axios = require("axios");
+      try {
+         const paystackRes = await axios.get(`https://api.paystack.co/transaction/verify/${req.body.reference}`, {
+            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197'}` }
+         });
+         const txData = paystackRes.data.data;
+         if (txData.status !== "success" || txData.amount / 100 < sessionAmount) {
+             await appointment.destroy();
+             await availabilitySlot.update({ status: "available" });
+             return res.status(400).json({ status: "fail", message: "Payment verification failed or amount mismatch ❌" });
+         }
+      } catch (error) {
+         await appointment.destroy();
+         await availabilitySlot.update({ status: "available" });
+         return res.status(500).json({ status: "error", message: "Failed to verify payment with Paystack" });
+      }
+
+      const platformShare = sessionAmount * 0.30;
+      const mentorShare = sessionAmount * 0.70;
+
+      const Payment = require("../models/payment");
+      await Payment.create({
+        appointmentId: appointment.id,
+        amount: sessionAmount,
+        mentorShare,
+        platformShare,
+        reference: req.body.reference,
+        status: "awaiting_acceptance"
+      });
+    }
+
     // ✅ Notify mentor
-await Notification.create({
-  receiverId: mentor.id,
-  receiverType: "mentor",
-  senderId: mentee.id,
-  message: `📅 New booking request from ${req.user.name} for ${date} at ${startTime}`,
-  type: "booking",
-  isRead: false,
-});
+    const actingUser = await User.findByPk(req.user.id);
+    const actingName = actingUser ? actingUser.name : (req.user.name || "A Mentee");
+    
+    const paymentText = sessionAmount > 0 ? ` (Paid: ₦${sessionAmount.toLocaleString()})` : '';
+    await Notification.create({
+      receiverId: mentor.id,
+      receiverType: "mentor",
+      senderId: mentee.id,
+      message: `📅 New booking request from ${actingName} for ${date} at ${startTime}${paymentText}`,
+      type: "booking",
+      isRead: false,
+    });
 
 // ✅ Auto-create accepted connection
 const Connection = require("../models/connection"); // Using this at the top logically, but we can do db.Connection.
@@ -222,21 +285,17 @@ exports.getMenteeAppointments = async (req, res) => {
             },
           ],
         },
+        { model: Review, as: "review" },
+        { model: MentorCommendation, as: "commendation" },
+        { model: require("../models").Payment, as: "payment" }
       ],
       order: [["date", "ASC"]],
     });
 
-    if (!appointments || appointments.length === 0) {
-      return res.status(404).json({
-        status: "fail",
-        message: "No appointments found ❌",
-      });
-    }
-
     res.status(200).json({
       status: "success",
-      message: "Mentee appointments fetched successfully ✅",
-      data: appointments,
+      message: appointments.length > 0 ? "Mentee appointments fetched successfully ✅" : "No appointments yet",
+      data: appointments || [],
     });
   } catch (error) {
     console.error("❌ Error fetching mentee appointments:", error);
@@ -328,6 +387,9 @@ exports.getMentorAppointments = async (req, res) => {
             },
           ],
         },
+        { model: Review, as: "review" },
+        { model: MentorCommendation, as: "commendation" },
+        { model: require("../models").Payment, as: "payment" }
       ],
       order: [["date", "ASC"]],
     });
@@ -335,7 +397,7 @@ exports.getMentorAppointments = async (req, res) => {
     res.status(200).json({
       status: "success",
       message: "Mentor appointments fetched successfully ✅",
-      data: appointments,
+      data: appointments || [],
     });
   } catch (error) {
     console.error("❌ Error fetching mentor appointments:", error);
@@ -364,8 +426,39 @@ exports.acceptAppointment = async (req, res) => {
       return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
     }
 
+    const meetingId = uuidv4();
     appointment.status = "accepted";
+    appointment.meetingId = meetingId;
+    appointment.meetingLink = `/call/${meetingId}`;
     await appointment.save();
+    
+    // Escrow payment upon acceptance
+    const Payment = require("../models").Payment;
+    const Wallet = require("../models/wallet");
+    const User = require("../models/user");
+    
+    const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
+    if (payment && payment.status === "awaiting_acceptance") {
+      payment.status = "pending";
+      await payment.save();
+
+      // Escrow mentor
+      let wallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
+      if (!wallet) {
+        wallet = await Wallet.create({ userId: mentor.user_id, availableBalance: 0, pendingBalance: 0 });
+      }
+      wallet.pendingBalance = Number(wallet.pendingBalance || 0) + payment.mentorShare;
+      await wallet.save();
+
+      // Escrow platform
+      let admin = await User.findOne({ where: { userType: 'admin' } });
+      if (admin) {
+         let adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
+         if (!adminWallet) adminWallet = await Wallet.create({ userId: admin.id, availableBalance: 0, pendingBalance: 0 });
+         adminWallet.pendingBalance = Number(adminWallet.pendingBalance || 0) + payment.platformShare;
+         await adminWallet.save();
+      }
+    }
 
     // Create notification
 await Notification.create({
@@ -400,6 +493,14 @@ exports.rejectAppointment = async (req, res) => {
 
     appointment.status = "rejected";
     await appointment.save();
+
+    // Handle refund logic
+    const Payment = require("../models").Payment;
+    const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
+    if (payment && payment.status === "awaiting_acceptance") {
+       payment.status = "refunded";
+       await payment.save();
+    }
 
     await Notification.create({
       receiverId: appointment.menteeId,

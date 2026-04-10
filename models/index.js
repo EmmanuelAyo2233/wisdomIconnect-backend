@@ -17,18 +17,21 @@ const Post = require("./post");
 const Availability = require("./availability");
 const Connection = require("./connection");
 const Playbook = require("./playbook");
+const PlaybookLike = require("./playbookLike");
+const PlaybookView = require("./playbookView");
+const SavedPlaybook = require("./savedPlaybook");
+const MessageRequest = require("./messageRequest");
+const Notification = require("./notification");
+const PlaybookComment = require("./playbookComment");
+const Review = require("./review");
+const MentorCommendation = require("./mentorCommendation");
+const Payment = require("./payment");
+const Wallet = require("./wallet");
+const Withdrawal = require("./withdrawal");
+const Achievement = require("./achievement");
+const UserAchievement = require("./userAchievement");
 
-let sequelize;
-if (config.use_env_variable) {
-    sequelize = new Sequelize(process.env[config.use_env_variable], config);
-} else {
-    sequelize = new Sequelize(
-        config.database,
-        config.username,
-        config.password,
-        config
-    );
-}
+const sequelize = require("../config/db");
 
 fs.readdirSync(__dirname)
     .filter((file) => {
@@ -72,6 +75,10 @@ Connection.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
 // Mentee.hasMany(Appointment, { foreignKey: "menteeId", as: "appointment" });
 // Appointment.belongsTo(Mentee, { foreignKey: "menteeId", as: "mentee" });
 
+Appointment.hasOne(Review, { foreignKey: "appointmentId", as: "review" });
+Appointment.hasOne(MentorCommendation, { foreignKey: "appointmentId", as: "commendation" });
+Appointment.hasOne(Payment, { foreignKey: "appointmentId", as: "payment" });
+
 Connection.hasMany(ChatMessage, {
     foreignKey: "chatAccessId",
     as: "chatMessage",
@@ -99,6 +106,45 @@ Comment.belongsTo(Post, { foreignKey: "postId", as: "post" });
 User.hasMany(Playbook, { foreignKey: "mentor_id", as: "playbooks" });
 Playbook.belongsTo(User, { foreignKey: "mentor_id", as: "mentor" });
 
+// Playbook Likes
+User.hasMany(PlaybookLike, { foreignKey: "user_id", as: "playbookLikes" });
+PlaybookLike.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Playbook.hasMany(PlaybookLike, { foreignKey: "playbook_id", as: "playbookLikes" });
+PlaybookLike.belongsTo(Playbook, { foreignKey: "playbook_id", as: "playbook" });
+
+// Playbook Views
+User.hasMany(PlaybookView, { foreignKey: "user_id", as: "playbookViews" });
+PlaybookView.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Playbook.hasMany(PlaybookView, { foreignKey: "playbook_id", as: "playbookViews" });
+PlaybookView.belongsTo(Playbook, { foreignKey: "playbook_id", as: "playbook" });
+
+// Saved Playbooks
+User.hasMany(SavedPlaybook, { foreignKey: "user_id", as: "savedPlaybooks" });
+SavedPlaybook.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Playbook.hasMany(SavedPlaybook, { foreignKey: "playbook_id", as: "savedPlaybooks" });
+SavedPlaybook.belongsTo(Playbook, { foreignKey: "playbook_id", as: "playbook" });
+
+// Playbook Comments
+User.hasMany(PlaybookComment, { foreignKey: "user_id", as: "playbookComments" });
+PlaybookComment.belongsTo(User, { foreignKey: "user_id", as: "user" });
+Playbook.hasMany(PlaybookComment, { foreignKey: "playbook_id", as: "comments" });
+PlaybookComment.belongsTo(Playbook, { foreignKey: "playbook_id", as: "playbook" });
+PlaybookComment.hasMany(PlaybookComment, { foreignKey: "parent_id", as: "replies" });
+PlaybookComment.belongsTo(PlaybookComment, { foreignKey: "parent_id", as: "parentComment" });
+
+// Message Requests
+Mentee.hasMany(MessageRequest, { foreignKey: "mentee_id", as: "messageRequests" });
+MessageRequest.belongsTo(Mentee, { foreignKey: "mentee_id", as: "mentee" });
+Mentor.hasMany(MessageRequest, { foreignKey: "mentor_id", as: "messageRequests" });
+MessageRequest.belongsTo(Mentor, { foreignKey: "mentor_id", as: "mentor" });
+
+// Gamification
+User.hasMany(UserAchievement, { foreignKey: "user_id", as: "achievements" });
+UserAchievement.belongsTo(User, { foreignKey: "user_id", as: "user" });
+
+Achievement.hasMany(UserAchievement, { foreignKey: "achievement_id", as: "earnedBy" });
+UserAchievement.belongsTo(Achievement, { foreignKey: "achievement_id", as: "achievement" });
+
 module.exports = {
     db,
     User,
@@ -111,4 +157,15 @@ module.exports = {
     Availability,
     Connection,
     Playbook,
+    PlaybookLike,
+    PlaybookView,
+    SavedPlaybook,
+    MessageRequest,
+    Notification,
+    PlaybookComment,
+    Review,
+    MentorCommendation,
+    Payment,
+    Wallet,
+    Withdrawal,
 };

@@ -72,15 +72,28 @@
 
       if (b.userType === "mentor") {
         // Mentor-specific validation
-        const expertise = asArray(b.expertise || b.topics); // up to 3
+        const expertise = asArray(b.expertise || b.topics); // max 5
+        const disciplines = asArray(b.disciplines); // max 3
+        const industries = asArray(b.industries); // max 3
+        const fluentIn = asArray(b.fluentIn); // max 5
+
         if (!b.yearsOfExperience) {
           return res.status(400).json({ status: "fail", message: "Years of experience is required" });
         }
         if (!expertise.length) {
           return res.status(400).json({ status: "fail", message: "Select at least 1 expertise topic" });
         }
-        if (expertise.length > 3) {
-          return res.status(400).json({ status: "fail", message: "Select up to 3 expertise topics" });
+        if (expertise.length > 5) {
+          return res.status(400).json({ status: "fail", message: "Select up to 5 expertise topics" });
+        }
+        if (disciplines.length > 3) {
+          return res.status(400).json({ status: "fail", message: "Select up to 3 disciplines" });
+        }
+        if (industries.length > 3) {
+          return res.status(400).json({ status: "fail", message: "Select up to 3 industries" });
+        }
+        if (fluentIn.length > 5) {
+          return res.status(400).json({ status: "fail", message: "Select up to 5 fluent languages" });
         }
 
         // Handle file upload if present
@@ -118,6 +131,9 @@
           yearsOfExperience: b.yearsOfExperience || b.experience || 0,
           bio: shortBio,   // ✅ correct column
           expertise: JSON.stringify(expertise),
+          discipline: JSON.stringify(disciplines),
+          industries: JSON.stringify(industries),
+          fluentIn: JSON.stringify(fluentIn),
           linkedinUrl: b.linkedinUrl || null,
         });
 
@@ -133,13 +149,27 @@
 
     } else if (b.userType === "mentee") {
       // Mentee flow
-      const interests = Array.isArray(b.interests) ? b.interests : [];
+      let rawInterests = b.interests;
+      // if interests look like "Guidance in Web Development", map them to base equivalent optionally, but user says "Remove it when storing/matching in backend". Let's handle string stripping.
+      const rawInterestsArray = asArray(rawInterests);
+      const interests = rawInterestsArray.map(i => i.replace(/^Guidance in\s+/i, ''));
+
       if (!interests.length) {
         return res.status(400).json({ status: "fail", message: "Select at least 1 interest" });
       }
       if (interests.length > 5) {
         return res.status(400).json({ status: "fail", message: "Select up to 5 interests" });
       }
+
+      const expertise = asArray(b.expertise);
+      const disciplines = asArray(b.disciplines);
+      const industries = asArray(b.industries);
+      const fluentIn = asArray(b.fluentIn);
+
+      if (expertise.length > 5) return res.status(400).json({ status: "fail", message: "Select up to 5 expertise topics" });
+      if (disciplines.length > 3) return res.status(400).json({ status: "fail", message: "Select up to 3 disciplines" });
+      if (industries.length > 3) return res.status(400).json({ status: "fail", message: "Select up to 3 industries" });
+      if (fluentIn.length > 5) return res.status(400).json({ status: "fail", message: "Select up to 5 fluent languages" });
 
       const newUser = await User.create({
         name: b.name,
@@ -150,10 +180,14 @@
       });
 
       const mentee = await Mentee.create({
-      user_id: newUser.id,
-      bio: shortBio, // ✅ map to correct DB column
-      interest: JSON.stringify(interests),
-  });
+          user_id: newUser.id,
+          bio: shortBio,
+          interest: JSON.stringify(interests),
+          expertise: JSON.stringify(expertise),
+          discipline: JSON.stringify(disciplines),
+          industries: JSON.stringify(industries),
+          fluentIn: JSON.stringify(fluentIn),
+      });
 
 
       const userResponse = newUser.get({ plain: true });

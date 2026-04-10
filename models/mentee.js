@@ -14,6 +14,7 @@ const Mentee = sequelize.define(
         fluentIn: { type: DataTypes.JSON, allowNull: true },
         expertise: { type: DataTypes.JSON, allowNull: true },
         industries: { type: DataTypes.JSON, allowNull: true },
+        discipline: { type: DataTypes.JSON, allowNull: true },
         experience: { type: DataTypes.JSON, allowNull: true }, // store array of objects: {title, company, startDate, endDate, present}
         education: { type: DataTypes.JSON, allowNull: true }, // store array of objects
         phone: { type: DataTypes.STRING, allowNull: true },

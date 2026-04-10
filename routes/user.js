@@ -21,4 +21,9 @@ router
 // Route to delete user account
 router.route("/me/delete").delete(authentication, deleteAccount);
 
+const { getMenteeProfileById } = require("../controllers/menteescontroller");
+
+// Route to fetch a mentee's public profile
+router.route("/mentee/:id").get(authentication, getMenteeProfileById);
+
 module.exports = router;

@@ -174,8 +174,12 @@ exports.rejectMentor = async (req, res) => {
 
     // 3️⃣ Remove or mark their mentor profile
     await Mentor.destroy({ where: { user_id: id } });
-    // OR if you want to keep history:
-    // await Mentor.update({ status: "rejected" }, { where: { user_id: id } });
+    
+    // 4️⃣ Create Mentee profile if it doesn't exist
+    const existingMentee = await Mentee.findOne({ where: { user_id: id } });
+    if (!existingMentee) {
+      await Mentee.create({ user_id: id });
+    }
 
     res.json({
       message: "Mentor rejected successfully, switched to mentee and removed from mentor list"

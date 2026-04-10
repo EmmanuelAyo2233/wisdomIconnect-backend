@@ -83,7 +83,7 @@ receiverType: {
 
 
   type: {
-    type: DataTypes.ENUM("booking", "message", "update", "system"),
+    type: DataTypes.ENUM("booking", "message", "update", "system", "message_request", "message_request_response"),
     defaultValue: "booking",
   },
 

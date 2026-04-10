@@ -39,6 +39,22 @@ const Availability = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    custom_duration: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    session_type: {
+      type: DataTypes.ENUM("fixed", "topic"),
+      defaultValue: "fixed",
+    },
+    session_title: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    topic_name: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: true,

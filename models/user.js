@@ -38,9 +38,24 @@ const User = sequelize.define(
         },
 
         approvedAt: {
-  type: DataTypes.DATE,
-  allowNull: true, // null until approved
-}
+   type: DataTypes.DATE,
+   allowNull: true, // null until approved
+        },
+        mentorLevel: {
+            type: DataTypes.ENUM("starter", "verified", "gold"),
+            defaultValue: "starter",
+            field: "mentorLevel",
+        },
+        sessionsCompleted: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+            field: "sessionsCompleted",
+        },
+        rating: {
+            type: DataTypes.FLOAT,
+            defaultValue: 0.0,
+            field: "rating",
+        }
             ,
         createdAt: {
             type: DataTypes.DATEONLY,

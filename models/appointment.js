@@ -36,6 +36,12 @@ const Appointment = sequelize.define(
       type: DataTypes.STRING,
       allowNull: true,
     },
+    meetingId: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      unique: true,
+      field: "meetingId",
+    },
     mentorId: {
       type: DataTypes.INTEGER,
       allowNull: false,
@@ -63,6 +69,36 @@ const Appointment = sequelize.define(
     rescheduleReason: {
       type: DataTypes.STRING,
       allowNull: true,
+    },
+    meetingLink: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "meetingLink",
+    },
+    mentorConfirmed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: "mentorConfirmed",
+    },
+    menteeConfirmed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: "menteeConfirmed",
+    },
+    callStartedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "callStartedAt",
+    },
+    callEndedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "callEndedAt",
+    },
+    autoCompleted: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      field: "autoCompleted",
     },
     createdAt: {
       type: DataTypes.DATEONLY,

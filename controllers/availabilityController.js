@@ -3,7 +3,7 @@ const Availability = require("../models/availability");
 
 exports.createAvailability = async (req, res) => {
   try {
-    const { date, day, startTime, endTime, status, title, price } = req.body;
+    const { date, day, startTime, endTime, status, title, price, session_type, session_title, topic_name } = req.body;
     const mentorId = req.user.id;
 
     // 🔒 Check required fields
@@ -11,41 +11,93 @@ exports.createAvailability = async (req, res) => {
       return res.status(400).json({ message: "Please provide date, startTime, and endTime ❌" });
     }
 
-    // ⛔ Date Validation Strict (Future Dates ONLY)
+    if (!session_type || !['fixed', 'topic'].includes(session_type)) {
+       return res.status(400).json({ message: "Invalid or missing session_type. Must be 'fixed' or 'topic'. ❌" });
+    }
+
+    if (session_type === 'fixed' && !topic_name) {
+       return res.status(400).json({ message: "A custom topic string must be provided when session type is fixed! ❌" });
+    }
+
+    const User = require("../models/user");
+    const Mentor = require("../models/mentor");
+    const user = await User.findByPk(mentorId, { include: [{ model: Mentor, as: "mentor" }] });
+    if (!user) return res.status(404).json({ message: "Mentor not found ❌" });
+
+    const sessionDuration = parseInt(req.body.custom_duration) || user.mentor?.default_duration || 30;
+    const globalPrice = user.mentor?.sessionPrice || 0;
+    const mentorLevel = user.mentorLevel || "starter";
+
+    // Date Logic
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const selectedDate = new Date(date);
     selectedDate.setHours(0, 0, 0, 0);
 
-    // ⛔ Block past or current dates
     if (selectedDate.getTime() <= today.getTime()) {
-      return res.status(400).json({ message: "Availability must be set strictly for future dates! ❌" });
+      return res.status(400).json({ message: "Availability must be set for strictly future dates! Today cannot be booked. ❌" });
     }
 
-    // ⛔ Prevent duplicate slots (same date & time for same mentor)
-    const existingSlot = await Availability.findOne({
-      where: { mentorId, date, startTime, endTime },
-    });
+    // Time Splitting Engine
+    const [startH, startM] = startTime.split(':').map(Number);
+    const [endH, endM] = endTime.split(':').map(Number);
+    let currentStart = new Date(selectedDate);
+    currentStart.setHours(startH, startM, 0, 0);
+    
+    let boundaryEnd = new Date(selectedDate);
+    boundaryEnd.setHours(endH, endM, 0, 0);
 
-    if (existingSlot) {
-      return res.status(400).json({ message: "This time slot is already set ❌" });
+    if (currentStart >= boundaryEnd) {
+       return res.status(400).json({ message: "Start time must be before end time! ❌" });
     }
 
-    // ✅ Create availability
-    const slot = await Availability.create({
-      mentorId,
-      date,
-      day,
-      startTime,
-      endTime,
-      title: title || 'Mentorship Session',
-      price: price || 0,
-      status: status || "available",
-    });
+    const newSlots = [];
+    
+    while (currentStart < boundaryEnd) {
+        let chunkEnd = new Date(currentStart.getTime() + sessionDuration * 60000);
+        
+        // Don't overshoot the boundary
+        if (chunkEnd > boundaryEnd) {
+           break;
+        }
+
+        const formattedStart = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}`;
+        const formattedEnd = `${String(chunkEnd.getHours()).padStart(2, '0')}:${String(chunkEnd.getMinutes()).padStart(2, '0')}`;
+
+        // Check duplicates
+        const existing = await Availability.findOne({
+          where: { mentorId, date, startTime: formattedStart }
+        });
+
+        if (!existing) {
+           newSlots.push({
+              mentorId,
+              date,
+              day,
+              startTime: formattedStart,
+              endTime: formattedEnd,
+              session_type: session_type,
+              session_title: title || 'Mentorship Session',
+              topic_name: session_type === 'fixed' ? topic_name : null,
+              title: title || 'Mentorship Session',
+              price: price !== null && price !== undefined ? price : (mentorLevel === 'starter' ? 0 : globalPrice),
+              status: "available",
+              custom_duration: req.body.custom_duration || null
+           });
+        }
+        
+        currentStart = chunkEnd;
+    }
+
+    if (newSlots.length === 0) {
+       return res.status(400).json({ message: "No valid time chunks could be created. Duration is too long for this block or slots already exist! ❌" });
+    }
+    
+    await Availability.bulkCreate(newSlots);
 
     return res.status(201).json({
-      message: "Availability created successfully ✅",
-      data: slot,
+      message: `${newSlots.length} availability slots generated successfully ✅`,
+      data: newSlots,
     });
   } catch (error) {
     console.error("Error creating availability:", error);
@@ -72,7 +124,7 @@ exports.getMentorAvailability = async (req, res) => {
     const upcomingSlots = slots.filter((slot) => {
       const slotDate = new Date(slot.date);
       slotDate.setHours(0, 0, 0, 0);
-      return slotDate > today;
+      return slot.status === "available" && slotDate > today;
     });
 
     return res.status(200).json({
@@ -188,6 +240,10 @@ exports.getAvailabilityByMentorId = async (req, res) => {
       day: slot.day,
       startTime: slot.startTime,
       endTime: slot.endTime,
+      session_type: slot.session_type || 'fixed',
+      session_title: slot.session_title || slot.title,
+      topic_name: slot.topic_name,
+      title: slot.title,
       price: slot.price,
       status: slot.status,
     }));
