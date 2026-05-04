@@ -111,6 +111,21 @@ app.use(`${API_URL}/payments`, paymentRoutes);
 
 app.use(`${API_URL}/call`, callRoutes);
 
+const wishlistRoutes = require("./routes/wishlistRoutes");
+app.use(`${API_URL}/social`, wishlistRoutes);
+
+const reportRoutes = require("./routes/reportRoutes");
+app.use(`${API_URL}/reports`, reportRoutes);
+
+const refundRoutes = require("./routes/refundRoutes");
+app.use(`${API_URL}/refunds`, refundRoutes);
+
+const announcementRoutes = require("./routes/announcementRoutes");
+app.use(`${API_URL}/announcements`, announcementRoutes);
+
+const platformSettingRoutes = require("./routes/platformSettingRoutes");
+app.use(`${API_URL}/settings`, platformSettingRoutes);
+
 app.get("/test-notifications", (req, res) => {
   res.json({ message: "Notifications route is alive ✅" });
 });
@@ -150,8 +165,28 @@ autoSwaggerJs({
 
 // --- Synchronize Database & Start Server ---
 db.sequelize.sync() // creates missing tables but avoids complex alterations to existing ones
-    .then(() => {
+    .then(async () => {
         console.log("✅ Database synchronized successfully (Tables created/updated)");
+        
+        // Safely add missing column to user table without alter: true which breaks on unique constraints
+        try {
+            await db.sequelize.query("ALTER TABLE `user` ADD COLUMN `accountStatus` ENUM('active', 'suspended', 'banned') DEFAULT 'active';");
+            console.log("✅ accountStatus column added to user table");
+        } catch (err) {
+            if (err.original && err.original.errno !== 1060) {
+                console.error("Note: accountStatus column already exists or could not be added.");
+            }
+        }
+
+        // Safely patch notification enum and message length
+        try {
+            await db.sequelize.query("ALTER TABLE `notifications` MODIFY COLUMN `receiverType` ENUM('mentor', 'mentee', 'admin') NOT NULL;");
+            await db.sequelize.query("ALTER TABLE `notifications` MODIFY COLUMN `message` TEXT NOT NULL;");
+            console.log("✅ notifications table patched (enum & message text)");
+        } catch (err) {
+            console.error("Note: could not patch notifications table.");
+        }
+
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/docs`);

@@ -219,9 +219,29 @@ exports.getAvailabilityByMentorId = async (req, res) => {
     today.setHours(0, 0, 0, 0);
 
     // ✅ Filter: only future + available slots
+    const Mentor = require("../models/mentor");
+    const Appointment = require("../models/appointment");
+    
+    const mentor = await Mentor.findOne({ where: { user_id: mentorId } });
+    let dateCounts = {};
+    if (mentor && mentor.maxSessionsPerDay) {
+       const appointments = await Appointment.findAll({
+          where: { mentorId: mentor.id, status: ["pending", "accepted", "completed"] }
+       });
+       appointments.forEach(app => {
+          dateCounts[app.date] = (dateCounts[app.date] || 0) + 1;
+       });
+    }
+
     const availableFutureSlots = slots.filter((slot) => {
       const slotDate = new Date(slot.date);
       slotDate.setHours(0, 0, 0, 0);
+      
+      // If date is fully booked, hide it
+      if (mentor && mentor.maxSessionsPerDay && dateCounts[slot.date] >= mentor.maxSessionsPerDay) {
+         return false;
+      }
+      
       return slot.status === "available" && slotDate > today;
     });
 

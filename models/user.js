@@ -32,6 +32,11 @@ const User = sequelize.define(
             allowNull: false,
             defaultValue: "pending", // New mentors start as pending
         },
+        accountStatus: {
+            type: DataTypes.ENUM("active", "suspended", "banned"),
+            allowNull: false,
+            defaultValue: "active",
+        },
        picture: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -40,6 +45,22 @@ const User = sequelize.define(
         approvedAt: {
    type: DataTypes.DATE,
    allowNull: true, // null until approved
+        },
+        isVerified: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+        },
+        verificationToken: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        passwordResetToken: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        passwordResetExpires: {
+            type: DataTypes.DATE,
+            allowNull: true,
         },
         mentorLevel: {
             type: DataTypes.ENUM("starter", "verified", "gold"),

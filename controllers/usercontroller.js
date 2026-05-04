@@ -1,8 +1,8 @@
-const { User, Mentee, Mentor, Appointment, Review, MentorCommendation } = require("../models");
+const { User, Mentee, Mentor, Appointment, Review, MentorCommendation, Achievement } = require("../models");
 const UserAchievement = require("../models/userAchievement");
-const Achievement = require("../models/achievement");
 const { cloudinary } = require("../utils/cloudinary");
 const streamifier = require("streamifier");
+const { bcrypt } = require("../config/reuseablePackages");
 
 // Helper to safely parse JSON or fallback to array
 const safeParseJSON = (value) => {
@@ -49,7 +49,7 @@ const getdetails = async (req, res) => {
        impact = {
           sessionsAttended: completedCount,
           minutesTrained: completedCount * 60,
-          sessionsCompleted: completedCount, // Changed from menteesGuided
+          sessionsCompleted: completedCount || user.sessionsCompleted || 0, // Fallback to user model if no appointments found
           attendanceRate: scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 100
        };
 
@@ -71,7 +71,7 @@ const getdetails = async (req, res) => {
        });
 
        impact = {
-          sessionsAttended: completedCount,
+          sessionsAttended: completedCount || user.sessionsCompleted || 0,
           minutesLearned: completedCount * 60,
           attendanceRate: scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 100
        };
@@ -83,16 +83,83 @@ const getdetails = async (req, res) => {
        });
     }
 
-    // Fetch Gamification Badges
-    const userAchievements = await UserAchievement.findAll({
-        where: { user_id: user.id },
+    // --- Gamification Sync Logic (Dynamic Milestone System) ---
+    // STRICT: only fetch achievements for this exact role — never award cross-role achievements
+    const roleAchievements = await Achievement.findAll({
+       where: { role: user.userType }
+    });
+    const existingUserAchievements = await UserAchievement.findAll({ where: { user_id: user.id, role: user.userType } });
+    const existingEarnedIds = new Set(existingUserAchievements.map(ua => ua.achievement_id));
+
+    // Build comprehensive stats
+    const sessionCount = impact.sessionsCompleted || impact.sessionsAttended || 0;
+    const minuteCount = impact.minutesTrained || impact.minutesLearned || 0;
+
+    let stats = {
+       sessions: sessionCount,
+       minutes: minuteCount,
+       rating: user.rating || 0,
+       bookings: 0,
+    };
+
+    // Count bookings for mentees
+    if (user.userType === 'mentee' && user.mentee) {
+       const totalBookings = await Appointment.count({ where: { menteeId: user.mentee.id } });
+       stats.bookings = totalBookings;
+    }
+
+    // Map criteria_type to current stat value
+    const statMap = {
+       mentor_sessions:    stats.sessions,
+       mentor_minutes:     stats.minutes,
+       mentee_sessions:    stats.sessions,
+       mentee_minutes:     stats.minutes,
+       mentee_bookings:    stats.bookings,
+       mentee_streaks:     0,
+    };
+
+    const newBadgesToAward = [];
+    for (const ach of roleAchievements) {
+       if (existingEarnedIds.has(ach.id)) continue;
+
+       if (ach.criteria_type === 'mentor_leaderboard') {
+          // Count how many approved mentors exist — award if user ranks within threshold
+          const totalMentors = await Mentor.count();
+          if (totalMentors <= ach.criteria_threshold) {
+             newBadgesToAward.push({ user_id: user.id, role: user.userType, achievement_id: ach.id, earned_at: new Date() });
+          }
+       } else {
+          const currentVal = statMap[ach.criteria_type] ?? 0;
+          if (currentVal >= ach.criteria_threshold) {
+             newBadgesToAward.push({ user_id: user.id, role: user.userType, achievement_id: ach.id, earned_at: new Date() });
+          }
+       }
+    }
+
+    if (newBadgesToAward.length > 0) {
+       console.log(`🏆 Awarding ${newBadgesToAward.length} new achievements to user ${user.id} (${user.userType})`);
+       try {
+          await UserAchievement.bulkCreate(newBadgesToAward, { ignoreDuplicates: true });
+       } catch(bulkErr) {
+          console.error("bulkCreate error:", bulkErr.message);
+          // Insert one-by-one as fallback
+          for (const badge of newBadgesToAward) {
+             try { await UserAchievement.create(badge); } catch(e) {}
+          }
+       }
+    }
+
+    // Fetch final achievements list (ONLY unlocked)
+    const finalUserAchievements = await UserAchievement.findAll({
+        where: { user_id: user.id, role: user.userType },
         include: [{ model: Achievement, as: "achievement" }]
     });
-    const achievementsList = userAchievements.map(ua => ({
-        id: ua.id,
+    const achievementsList = finalUserAchievements.map(ua => ({
+        id: ua.achievement?.id,
         title: ua.achievement?.title,
         description: ua.achievement?.description,
         icon: ua.achievement?.icon,
+        criteria_type: ua.achievement?.criteria_type,
         earned_at: ua.earned_at
     }));
 
@@ -124,6 +191,14 @@ const getdetails = async (req, res) => {
       sessionPrice: extraInfo.sessionPrice || 0,
       yearsOfExperience: extraInfo.yearsOfExperience || 0,
       experienceDescription: extraInfo.experienceDescription || "",
+      // Mentor settings fields
+      autoAccept: extraInfo.autoAccept ?? false,
+      instantBooking: extraInfo.instantBooking ?? false,
+      maxSessionsPerDay: extraInfo.maxSessionsPerDay ?? 5,
+      showInExplore: extraInfo.showInExplore ?? true,
+      showPricing: extraInfo.showPricing ?? true,
+      notifPrefs: extraInfo.notifPrefs || null,
+      privacySettings: extraInfo.privacySettings || null,
       impact,
       reviews,
       commendations,
@@ -138,6 +213,20 @@ const getdetails = async (req, res) => {
   } catch (err) {
     console.error("Error in getdetails:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
+  }
+};
+
+// --- Get all available platform achievements ---
+const getAllPlatformAchievements = async (req, res) => {
+  try {
+    const achievements = await Achievement.findAll();
+    return res.status(200).json({
+      status: "success",
+      data: achievements
+    });
+  } catch (err) {
+    console.error("Error fetching all platform achievements:", err);
+    res.status(500).json({ status: "fail", message: "Server error fetching achievements" });
   }
 };
 
@@ -322,9 +411,97 @@ const deleteAccount = async (req, res) => {
   }
 };
 
+// --- Change Password ---
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword)
+      return res.status(400).json({ status: 'fail', message: 'currentPassword and newPassword are required' });
+    if (newPassword.length < 8)
+      return res.status(400).json({ status: 'fail', message: 'Password must be at least 8 characters' });
+
+    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password'] });
+    const valid = await bcrypt.compare(currentPassword, user.password);
+    if (!valid) return res.status(401).json({ status: 'fail', message: 'Current password is incorrect' });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await user.update({ password: hashed });
+    return res.status(200).json({ status: 'success', message: 'Password updated successfully' });
+  } catch (err) {
+    console.error('changePassword error:', err);
+    return res.status(500).json({ status: 'error', message: 'Failed to change password' });
+  }
+};
+
+// --- Change Email ---
+const changeEmail = async (req, res) => {
+  try {
+    const { newEmail, password } = req.body;
+    if (!newEmail || !password)
+      return res.status(400).json({ status: 'fail', message: 'newEmail and password are required' });
+
+    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password', 'email'] });
+    const valid = await bcrypt.compare(password, user.password);
+    if (!valid) return res.status(401).json({ status: 'fail', message: 'Password is incorrect' });
+
+    const exists = await User.findOne({ where: { email: newEmail } });
+    if (exists) return res.status(400).json({ status: 'fail', message: 'Email already in use' });
+
+    await user.update({ email: newEmail });
+    return res.status(200).json({ status: 'success', message: 'Email updated successfully' });
+  } catch (err) {
+    console.error('changeEmail error:', err);
+    return res.status(500).json({ status: 'error', message: 'Failed to change email' });
+  }
+};
+
+// --- Update Settings (booking control, privacy, notifications) ---
+const updateMentorSettings = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const body = req.body;
+
+    if (req.user.userType === 'mentor') {
+      const mentor = await Mentor.findOne({ where: { user_id: userId } });
+      if (!mentor) return res.status(404).json({ status: 'fail', message: 'Mentor profile not found' });
+
+      // Booking control
+      if (body.autoAccept !== undefined) mentor.autoAccept = body.autoAccept;
+      if (body.instantBooking !== undefined) mentor.instantBooking = body.instantBooking;
+      if (body.maxSessionsPerDay !== undefined) mentor.maxSessionsPerDay = parseInt(body.maxSessionsPerDay);
+      if (body.showInExplore !== undefined) mentor.showInExplore = body.showInExplore;
+      if (body.showPricing !== undefined) mentor.showPricing = body.showPricing;
+
+      // Notification & Privacy
+      if (body.notifPrefs !== undefined) mentor.notifPrefs = body.notifPrefs;
+      if (body.privacySettings !== undefined) mentor.privacySettings = body.privacySettings;
+
+      await mentor.save();
+    } else if (req.user.userType === 'mentee') {
+      const mentee = await Mentee.findOne({ where: { user_id: userId } });
+      if (!mentee) return res.status(404).json({ status: 'fail', message: 'Mentee profile not found' });
+
+      // Notification & Privacy
+      if (body.notifPrefs !== undefined) mentee.notifPrefs = body.notifPrefs;
+      if (body.privacySettings !== undefined) mentee.privacySettings = body.privacySettings;
+      
+      await mentee.save();
+    }
+
+    return res.status(200).json({ status: 'success', message: 'Settings updated successfully' });
+  } catch (err) {
+    console.error('updateSettings error:', err);
+    return res.status(500).json({ status: 'error', message: 'Failed to update settings' });
+  }
+};
+
 module.exports = {
   getdetails,
   updateDetails,
   uploadprofilePicture,
   deleteAccount,
+  getAllPlatformAchievements,
+  changePassword,
+  changeEmail,
+  updateMentorSettings,
 };

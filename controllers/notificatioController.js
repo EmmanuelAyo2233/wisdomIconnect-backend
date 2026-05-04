@@ -33,6 +33,8 @@ exports.getNotifications = async (req, res) => {
         });
       }
       receiverId = req.user.menteeId;
+    } else if (userType === "admin") {
+      receiverId = req.user.id;
     } else {
       return res.status(400).json({
         status: "fail",
@@ -80,6 +82,8 @@ exports.markAllAsRead = async (req, res) => {
       receiverId = req.user.mentorId;
     } else if (userType === "mentee") {
       receiverId = req.user.menteeId;
+    } else if (userType === "admin") {
+      receiverId = req.user.id;
     } else {
       return res.status(400).json({
         status: "fail",
@@ -124,6 +128,8 @@ exports.markAsRead = async (req, res) => {
       receiverId = req.user.mentorId;
     } else if (userType === "mentee") {
       receiverId = req.user.menteeId;
+    } else if (userType === "admin") {
+      receiverId = req.user.id;
     }
 
     const notif = await Notification.findOne({

@@ -30,6 +30,10 @@ const Wallet = require("./wallet");
 const Withdrawal = require("./withdrawal");
 const Achievement = require("./achievement");
 const UserAchievement = require("./userAchievement");
+const RefundRequest = require("./refundRequest");
+const Announcement = require("./announcement");
+const PlatformSetting = require("./platformSetting");
+const AdminLog = require("./adminLog");
 
 const sequelize = require("../config/db");
 
@@ -145,6 +149,27 @@ UserAchievement.belongsTo(User, { foreignKey: "user_id", as: "user" });
 Achievement.hasMany(UserAchievement, { foreignKey: "achievement_id", as: "earnedBy" });
 UserAchievement.belongsTo(Achievement, { foreignKey: "achievement_id", as: "achievement" });
 
+// Wishlist & Reports
+const Wishlist = require("./wishlist");
+const Report = require("./report");
+User.hasMany(Report, { foreignKey: "reporterId", as: "reporter" });
+User.hasMany(Report, { foreignKey: "reportedUserId", as: "reportedUser" });
+Report.belongsTo(User, { foreignKey: "reporterId", as: "reporter" });
+Report.belongsTo(User, { foreignKey: "reportedUserId", as: "reportedUser" });
+
+// Admin & Platform
+User.hasMany(RefundRequest, { foreignKey: "userId", as: "refundRequests" });
+RefundRequest.belongsTo(User, { foreignKey: "userId", as: "user" });
+
+Payment.hasOne(RefundRequest, { foreignKey: "paymentId", as: "refundRequest" });
+RefundRequest.belongsTo(Payment, { foreignKey: "paymentId", as: "payment" });
+
+User.hasMany(Announcement, { foreignKey: "adminId", as: "announcements" });
+Announcement.belongsTo(User, { foreignKey: "adminId", as: "admin" });
+
+User.hasMany(AdminLog, { foreignKey: "adminId", as: "adminLogs" });
+AdminLog.belongsTo(User, { foreignKey: "adminId", as: "admin" });
+
 module.exports = {
     db,
     User,
@@ -168,4 +193,12 @@ module.exports = {
     Payment,
     Wallet,
     Withdrawal,
+    Achievement,
+    UserAchievement,
+    Wishlist,
+    Report,
+    RefundRequest,
+    Announcement,
+    PlatformSetting,
+    AdminLog,
 };

@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { Wallet, Payment, Appointment, Mentor, Mentee, User, Withdrawal } = require('../models');
 const { Op } = require('sequelize');
+const notificationService = require("../services/notificationService");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197';
 
@@ -30,7 +31,12 @@ exports.verifyPayment = async (req, res) => {
         const existingPayment = await Payment.findOne({ where: { reference } });
         if (existingPayment) return res.status(400).json({ success: false, message: "Transaction already processed" });
 
-        const appointment = await Appointment.findByPk(appointmentId, { include: ['mentor'] });
+        const appointment = await Appointment.findByPk(appointmentId, { 
+            include: [
+                { model: Mentor, as: 'mentor', include: [{ model: User, as: 'user' }] },
+                { model: Mentee, as: 'mentee', include: [{ model: User, as: 'user' }] }
+            ] 
+        });
         if (!appointment) return res.status(404).json({ success: false, message: "Appointment not found" });
 
         const amountNaira = data.amount / 100;
@@ -57,6 +63,16 @@ exports.verifyPayment = async (req, res) => {
         const adminWallet = await getPlatformAdminWallet();
         adminWallet.pendingBalance += platformShare;
         await adminWallet.save();
+
+        // Send Payment Success Notification
+        if (appointment.mentee && appointment.mentee.user) {
+           notificationService.sendPaymentSuccess(
+               appointment.mentee.user, 
+               "mentee", 
+               `₦${amountNaira.toLocaleString()}`, 
+               `Session with ${appointment.mentor.user.name}`
+           ).catch(console.error);
+        }
 
         res.status(200).json({ success: true, message: "Payment verified successfully", payment });
     } catch (err) {
@@ -127,7 +143,12 @@ exports.requestRefund = async (req, res) => {
         const { appointmentId } = req.body;
         const userId = req.user.id;
 
-        const appointment = await Appointment.findByPk(appointmentId, { include: ['mentee', 'mentor'] });
+        const appointment = await Appointment.findByPk(appointmentId, { 
+            include: [
+                { model: Mentee, as: 'mentee', include: [{ model: User, as: 'user' }] }, 
+                { model: Mentor, as: 'mentor' }
+            ] 
+        });
         if (!appointment) return res.status(404).json({ success: false, message: "Appointment not found" });
 
         if (appointment.mentee.user_id !== userId) return res.status(403).json({ success: false, message: "Unauthorized" });
@@ -171,6 +192,20 @@ exports.requestRefund = async (req, res) => {
             await adminWallet.save();
             
             // Initiating Paystack Refund ...
+            
+            if (appointment.mentee && appointment.mentee.user) {
+                notificationService.sendNotification({
+                  receiverId: appointment.mentee.id,
+                  receiverType: "mentee",
+                  type: "payment",
+                  title: "Refund Initiated",
+                  message: `Your refund of ₦${payment.amount.toLocaleString()} has been processed.`,
+                  emailData: {
+                     to: appointment.mentee.user.email,
+                     html: require("../utils/emailTemplates").refundInitiated(appointment.mentee.user.name, `₦${payment.amount.toLocaleString()}`, "Session Cancellation")
+                  }
+                }).catch(console.error);
+            }
         }
 
         res.status(200).json({ success: true, message: "Refund processed successfully." });
@@ -205,6 +240,11 @@ exports.withdrawFunds = async (req, res) => {
              status: 'completed' 
              // In prod: call Paystack Transfers, set to pending if async
         });
+
+        const user = await User.findByPk(userId);
+        if (user) {
+            notificationService.sendPayoutProcessed(user, `₦${amount.toLocaleString()}`).catch(console.error);
+        }
 
         res.status(200).json({ success: true, message: "Withdrawal successful", newBalance: wallet.availableBalance });
     } catch (err) {

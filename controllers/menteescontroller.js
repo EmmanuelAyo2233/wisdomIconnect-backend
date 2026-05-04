@@ -175,6 +175,43 @@ const getMenteeProfileById = async (req, res) => {
       }
     } catch(e) {}
 
+    // Fetch Gamification Badges
+    const UserAchievement = require("../models/userAchievement");
+    const Achievement = require("../models/achievement");
+    
+    // Enforce Privacy: profileVisibility
+    let privacySettings = {};
+    if (mentee.privacySettings) {
+      try {
+        privacySettings = typeof mentee.privacySettings === 'string' ? JSON.parse(mentee.privacySettings) : mentee.privacySettings;
+      } catch (e) {
+        privacySettings = mentee.privacySettings;
+      }
+    }
+    const isOwner = req.user?.id === mentee.user_id;
+
+    if (!isOwner && privacySettings.profileVisibility === 'private') {
+      return res.status(403).json({ status: "fail", message: "This mentee's profile is private." });
+    }
+
+    let achievementsList = [];
+    if (isOwner || privacySettings.showAchievements !== false) {
+       try {
+          const userAchievements = await UserAchievement.findAll({
+              where: { user_id: mentee.user_id, role: "mentee" },
+              include: [{ model: Achievement, as: "achievement" }]
+          });
+          achievementsList = userAchievements.map(ua => ({
+              id: ua.id,
+              title: ua.achievement?.title,
+              description: ua.achievement?.description,
+              icon: ua.achievement?.icon,
+              criteria_type: ua.achievement?.criteria_type,
+              earned_at: ua.earned_at
+          }));
+       } catch(e) {}
+    }
+
     const profileData = {
       ...mentee.toJSON(),
       role: mentee.role || "Mentee",
@@ -187,7 +224,8 @@ const getMenteeProfileById = async (req, res) => {
         minutesLearned: minutesLearned,
         attendanceRate: attendanceRate
       },
-      commendations
+      commendations,
+      achievements: achievementsList
     };
 
     res.status(200).json({ status: "success", data: profileData });

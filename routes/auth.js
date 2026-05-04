@@ -2,13 +2,16 @@ const { express } = require("../config/reuseablePackages");
 const {
     signup,
     login,
+    forgotPassword,
     resetPassword,
     approveMentor,
     rejectMentor,
     authentication,
     restrictTo,
-    logout,  // <-- import it
-} = require("../controllers/authcontrollers"); // make sure the name matches your controller
+    logout,
+    verifyEmail,
+    resendVerification,
+} = require("../controllers/authcontrollers");
 const { upload } = require("../utils/cloudinary");
 
 const router = express.Router();
@@ -31,9 +34,12 @@ router.get("/fix-db", async (req, res) => {
         res.send("Sync Error: " + e.message);
     }
 });
-router.route("/reset").patch(resetPassword);
-router.post("/logout",  authentication, logout);
 
+router.post("/forgot-password", forgotPassword);
+router.post("/reset-password", resetPassword);
+router.post("/logout",  authentication, logout);
+router.post("/verify-email", verifyEmail);
+router.post("/resend-verification", resendVerification);
 
 // Admin-only routes for mentor approval/rejection
 router.patch(

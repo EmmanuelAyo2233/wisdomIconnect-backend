@@ -8,6 +8,7 @@ const User = require("../models/user");
 const Review = require("../models/review");
 const MentorCommendation = require("../models/mentorCommendation");
 const { v4: uuidv4 } = require("uuid");
+const notificationService = require("../services/notificationService");
 
 // =====================
 // 📅 MENTEE ACTIONS
@@ -79,6 +80,16 @@ exports.bookAppointment = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "This slot was just booked by someone else! Please pick another time ❌" });
     }
 
+    // ⛔ Limit Validation: Max Sessions Per Day
+    if (mentor.maxSessionsPerDay) {
+       const sessionsTodayCount = await Appointment.count({
+          where: { mentorId: mentor.id, date, status: ["pending", "accepted", "completed"] }
+       });
+       if (sessionsTodayCount >= mentor.maxSessionsPerDay) {
+          return res.status(400).json({ status: "fail", message: `This mentor has reached their maximum daily limit of ${mentor.maxSessionsPerDay} sessions. Please choose another date ❌` });
+       }
+    }
+
     // ⛔ Date Validation: Must be future date
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -105,6 +116,7 @@ exports.bookAppointment = async (req, res) => {
     }
 
     // ✅ Create appointment
+    const meetingId = mentor.autoAccept ? uuidv4() : null;
     const appointment = await Appointment.create({
       mentorId: mentor.id,
       menteeId: mentee.id,
@@ -113,7 +125,9 @@ exports.bookAppointment = async (req, res) => {
       endTime,
       topic,
       goals,
-      status: "pending",
+      status: mentor.autoAccept ? "accepted" : "pending",
+      meetingId: meetingId,
+      meetingLink: meetingId ? `/call/${meetingId}` : null
     });
 
     // ✅ Mark slot as booked
@@ -122,10 +136,9 @@ exports.bookAppointment = async (req, res) => {
       appointment.update({ slotId: availabilitySlot.id }),
     ]);
 
-    // ✅ Payment Logic (Pending at booking)
+    // ✅ Payment Logic
     if (sessionAmount > 0) {
       if (!req.body.reference) {
-         // Rolling back appointment and slot Since payment failed
          await appointment.destroy();
          await availabilitySlot.update({ status: "available" });
          return res.status(400).json({ status: "fail", message: "Payment reference is required for paid sessions ❌" });
@@ -152,29 +165,52 @@ exports.bookAppointment = async (req, res) => {
       const mentorShare = sessionAmount * 0.70;
 
       const Payment = require("../models/payment");
-      await Payment.create({
+      const paymentStatus = mentor.autoAccept ? "pending" : "awaiting_acceptance";
+      const payment = await Payment.create({
         appointmentId: appointment.id,
         amount: sessionAmount,
         mentorShare,
         platformShare,
         reference: req.body.reference,
-        status: "awaiting_acceptance"
+        status: paymentStatus
       });
+
+      if (mentor.autoAccept) {
+        const Wallet = require("../models/wallet");
+        let wallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
+        if (!wallet) wallet = await Wallet.create({ userId: mentor.user_id, availableBalance: 0, pendingBalance: 0 });
+        wallet.pendingBalance = Number(wallet.pendingBalance || 0) + mentorShare;
+        await wallet.save();
+
+        let admin = await User.findOne({ where: { userType: 'admin' } });
+        if (admin) {
+           let adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
+           if (!adminWallet) adminWallet = await Wallet.create({ userId: admin.id, availableBalance: 0, pendingBalance: 0 });
+           adminWallet.pendingBalance = Number(adminWallet.pendingBalance || 0) + platformShare;
+           await adminWallet.save();
+        }
+      }
     }
 
     // ✅ Notify mentor
     const actingUser = await User.findByPk(req.user.id);
     const actingName = actingUser ? actingUser.name : (req.user.name || "A Mentee");
-    
     const paymentText = sessionAmount > 0 ? ` (Paid: ₦${sessionAmount.toLocaleString()})` : '';
-    await Notification.create({
-      receiverId: mentor.id,
-      receiverType: "mentor",
-      senderId: mentee.id,
-      message: `📅 New booking request from ${actingName} for ${date} at ${startTime}${paymentText}`,
-      type: "booking",
-      isRead: false,
-    });
+    
+    // Check Notification Prefs
+    let notifPrefs = {};
+    if (mentor.notifPrefs) {
+      try { notifPrefs = typeof mentor.notifPrefs === 'string' ? JSON.parse(mentor.notifPrefs) : mentor.notifPrefs; } catch(e) {}
+    }
+
+    if (notifPrefs.booking_requests_app !== false) {
+      const mentorUserObj = await User.findByPk(mentor.user_id);
+      if (mentor.autoAccept) {
+          notificationService.sendBookingAccepted(req.user, mentorUserObj, `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`, `/call/${meetingId}`).catch(console.error);
+      } else {
+          notificationService.sendBookingRequest(req.user, mentorUserObj, `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`).catch(console.error);
+      }
+    }
 
 // ✅ Auto-create accepted connection
 const Connection = require("../models/connection"); // Using this at the top logically, but we can do db.Connection.
@@ -239,6 +275,27 @@ exports.cancelAppointment = async (req, res) => {
     }
 
     await appointment.update({ status: "cancelled" });
+
+    // Notify mentor
+    const mentorUserObj = await User.findByPk(appointment.mentorId, { include: [{ model: Mentor, as: "mentor" }] }); // Note: mentorId is the Mentor PK. Wait, mentorId is ID in Mentor table.
+    const mentorRec = await Mentor.findByPk(appointment.mentorId);
+    if (mentorRec) {
+        const mentorUser = await User.findByPk(mentorRec.user_id);
+        const menteeUser = await User.findByPk(mentee.user_id);
+        if (mentorUser && menteeUser) {
+           notificationService.sendNotification({
+              receiverId: mentorRec.id,
+              receiverType: "mentor",
+              type: "booking",
+              title: "Booking Cancelled",
+              message: `❌ ${menteeUser.name} has cancelled the upcoming session on ${appointment.date}.`,
+              emailData: {
+                 to: mentorUser.email,
+                 html: require("../utils/emailTemplates").bookingCancelled(mentorUser.name, menteeUser.name, "Mentee initiated cancellation")
+              }
+           }).catch(console.error);
+        }
+    }
 
     res.status(200).json({
       status: "success",
@@ -461,14 +518,16 @@ exports.acceptAppointment = async (req, res) => {
     }
 
     // Create notification
-await Notification.create({
-  receiverId: appointment.menteeId,
-  receiverType: "mentee",
-  senderId: mentor.id,
-  message: "✅ Your appointment has been accepted!",
-  type: "booking",
-  isRead: false,
-});
+    const menteeRec = await Mentee.findByPk(appointment.menteeId);
+    const menteeUser = await User.findByPk(menteeRec.user_id);
+    const mentorUserObj = await User.findByPk(mentor.user_id);
+    
+    notificationService.sendBookingAccepted(
+      menteeUser, 
+      mentorUserObj, 
+      `Date: ${appointment.date}\nTime: ${appointment.startTime}`, 
+      appointment.meetingLink
+    ).catch(console.error);
 
 
 
@@ -502,14 +561,21 @@ exports.rejectAppointment = async (req, res) => {
        await payment.save();
     }
 
-    await Notification.create({
+    const menteeRec = await Mentee.findByPk(appointment.menteeId);
+    const menteeUser = await User.findByPk(menteeRec.user_id);
+    const mentorUserObj = await User.findByPk(mentor.user_id);
+
+    notificationService.sendNotification({
       receiverId: appointment.menteeId,
       receiverType: "mentee",
-      senderId: mentor.id,
-      message: "❌ Your appointment was declined by the mentor.",
       type: "booking",
-      isRead: false,
-    });
+      title: "Booking Declined",
+      message: "❌ Your appointment was declined by the mentor.",
+      emailData: {
+         to: menteeUser.email,
+         html: require("../utils/emailTemplates").bookingDeclined(menteeUser.name, mentorUserObj.name, "Mentor unavailable")
+      }
+    }).catch(console.error);
 
     res.status(200).json({ status: "success", message: "Appointment rejected ✅", data: appointment });
   } catch (error) {
@@ -540,14 +606,20 @@ exports.mentorRescheduleAppointment = async (req, res) => {
 
     await appointment.save();
 
-    await Notification.create({
+    const menteeRec = await Mentee.findByPk(appointment.menteeId);
+    const menteeUser = await User.findByPk(menteeRec.user_id);
+
+    notificationService.sendNotification({
       receiverId: appointment.menteeId,
       receiverType: "mentee",
-      senderId: mentor.id,
-      message: `🔄 Your appointment was rescheduled to ${appointment.date} at ${appointment.startTime}. Reason: ${appointment.rescheduleReason}`,
       type: "update",
-      isRead: false,
-    });
+      title: "Session Rescheduled",
+      message: `🔄 Your appointment was rescheduled to ${appointment.date} at ${appointment.startTime}.`,
+      emailData: {
+         to: menteeUser.email,
+         html: require("../utils/emailTemplates").sessionReminder(menteeUser.name, mentor.user?.name || "Your mentor", `${appointment.date} at ${appointment.startTime}`, appointment.meetingLink || "#")
+      }
+    }).catch(console.error);
 
     res.status(200).json({ status: "success", message: "Appointment rescheduled ✅", data: appointment });
   } catch (error) {

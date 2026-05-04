@@ -1,27 +1,87 @@
 const { Appointment, Mentor, Mentee, User, Review, MentorCommendation, Payment, Wallet } = require("../models");
 const Achievement = require("../models/achievement");
 const UserAchievement = require("../models/userAchievement");
+const { Op } = require("sequelize");
 
-async function checkAndAwardAchievement(userId, role, sessionsCount) {
-    const fetchAndAward = async (title) => {
-        const ach = await Achievement.findOne({ where: { title } });
-        if (ach) {
-            const exists = await UserAchievement.findOne({ where: { user_id: userId, achievement_id: ach.id } });
-            if (!exists) {
-                await UserAchievement.create({ user_id: userId, role, achievement_id: ach.id });
+/**
+ * Dynamic achievement awarding system.
+ * Checks ALL achievements for the user's role and awards any whose threshold is met.
+ * This supports the continuous milestone pattern — no hardcoded limits.
+ * 
+ * @param {number} userId - The user's ID
+ * @param {string} role - 'mentor' or 'mentee'
+ * @param {object} stats - { sessions, minutes, bookings, streaks }
+ */
+async function checkAndAwardAchievements(userId, role, stats = {}) {
+    try {
+        // Fetch all achievements for this role
+        const roleAchievements = await Achievement.findAll({
+            where: {
+                [Op.or]: [
+                    { role: role },
+                    { role: null }     // shared achievements
+                ]
+            }
+        });
+
+        // Fetch already-earned achievement IDs
+        const earnedRows = await UserAchievement.findAll({
+            where: { user_id: userId, role },
+            attributes: ['achievement_id']
+        });
+        const earnedIds = new Set(earnedRows.map(r => r.achievement_id));
+
+        // Map criteria_type to stat values
+        const statMap = {
+            // Mentor types
+            mentor_sessions: stats.sessions || 0,
+            mentor_minutes: stats.minutes || 0,
+            mentor_leaderboard: stats.leaderboardRank || 999999,
+            // Mentee types
+            mentee_sessions: stats.sessions || 0,
+            mentee_minutes: stats.minutes || 0,
+            mentee_bookings: stats.bookings || 0,
+            mentee_streaks: stats.streaks || 0,
+            // Legacy types (backwards compatible)
+            sessions: stats.sessions || 0,
+            rating: stats.rating || 0,
+            engagement: stats.engagement || 0,
+        };
+
+        const newAwards = [];
+        for (const ach of roleAchievements) {
+            if (earnedIds.has(ach.id)) continue; // Already earned
+
+            const currentVal = statMap[ach.criteria_type] || 0;
+
+            // For leaderboard, lower rank = better (Top 10 means rank <= 10)
+            if (ach.criteria_type === 'mentor_leaderboard') {
+                if (currentVal <= ach.criteria_threshold) {
+                    newAwards.push({
+                        user_id: userId,
+                        role,
+                        achievement_id: ach.id,
+                        earned_at: new Date()
+                    });
+                }
+            } else {
+                if (currentVal >= ach.criteria_threshold) {
+                    newAwards.push({
+                        user_id: userId,
+                        role,
+                        achievement_id: ach.id,
+                        earned_at: new Date()
+                    });
+                }
             }
         }
-    };
 
-    if (role === 'mentor') {
-        if (sessionsCount === 1) await fetchAndAward('First Session');
-        if (sessionsCount === 10) await fetchAndAward('Bronze Mentor');
-        if (sessionsCount === 50) await fetchAndAward('Silver Mentor');
-        if (sessionsCount === 100) await fetchAndAward('Gold Mentor');
-    } else if (role === 'mentee') {
-        if (sessionsCount === 1) await fetchAndAward('First Session');
-        if (sessionsCount === 10) await fetchAndAward('Active Learner');
-        if (sessionsCount === 50) await fetchAndAward('Dedicated Learner');
+        if (newAwards.length > 0) {
+            await UserAchievement.bulkCreate(newAwards);
+            console.log(`🏆 Awarded ${newAwards.length} new achievement(s) to user ${userId} (${role})`);
+        }
+    } catch (err) {
+        console.error("❌ Achievement check error:", err.message);
     }
 }
 
@@ -71,8 +131,13 @@ exports.markSessionComplete = async (req, res) => {
                 }
                 await mentor.user.save();
 
-                // Gamification hook
-                await checkAndAwardAchievement(mentor.user.id, "mentor", mentor.user.sessionsCompleted);
+                // 🏆 Dynamic achievement check with full stats
+                const mentorCompletedAppts = await Appointment.count({ where: { mentorId: mentor.id, status: 'completed' } });
+                await checkAndAwardAchievements(mentor.user.id, "mentor", {
+                    sessions: mentorCompletedAppts,
+                    minutes: mentorCompletedAppts * 60,
+                    rating: mentor.user.rating || 0
+                });
             }
 
             // Mentee progression update
@@ -81,8 +146,14 @@ exports.markSessionComplete = async (req, res) => {
                 mentee.user.sessionsCompleted = (mentee.user.sessionsCompleted || 0) + 1;
                 await mentee.user.save();
                 
-                // Gamification hook
-                await checkAndAwardAchievement(mentee.user.id, "mentee", mentee.user.sessionsCompleted);
+                // 🏆 Dynamic achievement check with full stats
+                const menteeCompletedAppts = await Appointment.count({ where: { menteeId: mentee.id, status: 'completed' } });
+                const menteeBookings = await Appointment.count({ where: { menteeId: mentee.id } });
+                await checkAndAwardAchievements(mentee.user.id, "mentee", {
+                    sessions: menteeCompletedAppts,
+                    minutes: menteeCompletedAppts * 60,
+                    bookings: menteeBookings
+                });
             }
 
             // Payment logic

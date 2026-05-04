@@ -46,14 +46,10 @@ exports.requestConnection = async (req, res) => {
     }
 
     // Notify Mentor
-    await Notification.create({
-      receiverId: mentor.id,
-      receiverType: "mentor",
-      senderId: mentee.id,
-      message: `📩 New message request from Mentee`,
-      type: "booking",
-      isRead: false,
-    });
+    const notificationService = require("../services/notificationService");
+    const menteeUserObj = await User.findByPk(menteeUserId);
+    const mentorUserObj = await User.findByPk(mentorUserId);
+    await notificationService.sendMessageRequest(menteeUserObj, mentorUserObj, "mentor");
 
     res.status(201).json({ status: "success", data: connection });
   } catch (error) {
@@ -83,15 +79,27 @@ exports.respondConnection = async (req, res) => {
     connection.status = status;
     await connection.save();
 
-    // Notify Mentee
-    await Notification.create({
-      receiverId: connection.menteeId,
-      receiverType: "mentee",
-      senderId: mentor.id,
-      message: status === "accepted" ? "✅ Your message request was accepted! You can now chat." : "❌ Your message request was declined.",
-      type: "update",
-      isRead: false,
-    });
+    const notificationService = require("../services/notificationService");
+    
+    if (status === "accepted") {
+        // Send nice email + notification
+        const menteeUser = await User.findByPk(connection.menteeId, { include: [Mentee] }); // Wait! menteeId is Mentee.id!
+        // No, I need the mentee User object!
+        const m = await Mentee.findByPk(connection.menteeId);
+        const menteeUserObj = await User.findByPk(m.user_id);
+        const mentorUserObj = await User.findByPk(mentor.user_id);
+        
+        await notificationService.sendMessageRequestAccepted(mentorUserObj, menteeUserObj, "mentee");
+    } else {
+        await Notification.create({
+          receiverId: connection.menteeId,
+          receiverType: "mentee",
+          senderId: mentor.id,
+          message: "❌ Your message request was declined.",
+          type: "update",
+          isRead: false,
+        });
+    }
 
     res.status(200).json({ status: "success", data: connection });
   } catch (error) {
@@ -104,6 +112,7 @@ exports.getConnections = async (req, res) => {
   try {
     const userId = req.user.id;
     const userType = req.user.userType || req.user.role;
+    const { ChatMessage } = require("../models");
 
     let connections = [];
 
@@ -118,6 +127,10 @@ exports.getConnections = async (req, res) => {
              model: Mentee,
              as: "mentee",
              include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }]
+           },
+           {
+             model: ChatMessage,
+             as: "chatMessage"
            }
          ]
        });
@@ -132,12 +145,54 @@ exports.getConnections = async (req, res) => {
              model: Mentor,
              as: "mentor",
              include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }]
+           },
+           {
+             model: ChatMessage,
+             as: "chatMessage"
            }
          ]
        });
     }
+    
+    // Process messages to attach lastMessage and unreadCount
+    const formattedConnections = connections.map(conn => {
+        const c = conn.toJSON();
+        let lastMessageStr = "Tap to open chat";
+        let unread = 0;
+        let lastMessageTime = null;
+        let lastMessageSenderId = null;
+        
+        if (c.chatMessage && c.chatMessage.length > 0) {
+            // Sort by createdAt ascending
+            const msgs = c.chatMessage.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            const lastMsg = msgs[msgs.length - 1];
+            
+            if (lastMsg.isDeleted) {
+                lastMessageStr = "🚫 This message was deleted";
+            } else if (lastMsg.message) {
+                lastMessageStr = lastMsg.message;
+            } else if (lastMsg.fileUrl) {
+                lastMessageStr = "📎 Attachment";
+            }
+            
+            lastMessageTime = lastMsg.createdAt;
+            lastMessageSenderId = lastMsg.senderId;
+            
+            unread = msgs.filter(m => !m.isRead && m.senderId !== userId).length;
+        }
+        
+        delete c.chatMessage;
+        return { ...c, lastMessageStr, unreadCount: unread, lastMessageTime, lastMessageSenderId };
+    });
+    
+    // Sort by lastMessageTime descending
+    formattedConnections.sort((a, b) => {
+        if (!a.lastMessageTime) return 1;
+        if (!b.lastMessageTime) return -1;
+        return new Date(b.lastMessageTime) - new Date(a.lastMessageTime);
+    });
 
-    res.status(200).json({ status: "success", data: connections });
+    res.status(200).json({ status: "success", data: formattedConnections });
   } catch(error) {
     console.error("Get connections error:", error);
     res.status(500).json({ message: "Internal server error" });

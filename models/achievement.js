@@ -29,6 +29,12 @@ const Achievement = sequelize.define(
         criteria_threshold: {
             type: DataTypes.INTEGER,
             allowNull: false,
+        },
+        role: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            defaultValue: null,
+            comment: "mentor or mentee — null means shared"
         }
     },
     {

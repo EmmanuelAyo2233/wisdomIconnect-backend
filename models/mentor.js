@@ -97,6 +97,41 @@ const Mentor = sequelize.define(
             type: DataTypes.JSON,
             allowNull: true,
         },
+        autoAccept: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            field: 'auto_accept',
+        },
+        instantBooking: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            field: 'instant_booking',
+        },
+        maxSessionsPerDay: {
+            type: DataTypes.INTEGER,
+            defaultValue: 5,
+            field: 'max_sessions_per_day',
+        },
+        showInExplore: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+            field: 'show_in_explore',
+        },
+        showPricing: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: true,
+            field: 'show_pricing',
+        },
+        notifPrefs: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            field: 'notif_prefs',
+        },
+        privacySettings: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            field: 'privacy_settings',
+        },
     },
     {
         freezeTableName: true,

@@ -5,7 +5,7 @@ const {
     getAllPlaybooks,
     getMentorPlaybooks, // new
     getPlaybookDetails,
-    getPendingPlaybooks,
+    getAdminPlaybooks,
     approvePlaybook,
     deletePlaybook,
     updatePlaybook, // new
@@ -33,7 +33,7 @@ router.put("/:id", authentication, restrictTo("mentor"), updatePlaybook); // upd
 router.get("/:id", authentication, getPlaybookDetails);
 
 // Admin routes
-router.get("/admin/pending", authentication, restrictTo("admin"), getPendingPlaybooks);
+router.get("/admin/all", authentication, restrictTo("admin"), getAdminPlaybooks);
 router.put("/:id/approve", authentication, restrictTo("admin"), approvePlaybook);
 
 // Admin or Owner routes

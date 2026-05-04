@@ -1,5 +1,6 @@
 const { MessageRequest, Mentee, Mentor, User, Connection, Notification } = require("../models");
 const { Op } = require("sequelize");
+const notificationService = require("../services/notificationService");
 
 // 1. Send Message Request (Mentee -> Mentor)
 exports.sendMessageRequest = async (req, res) => {
@@ -29,6 +30,19 @@ exports.sendMessageRequest = async (req, res) => {
             return res.status(404).json({ status: "fail", message: "Mentor not found" });
         }
 
+        // Check privacy settings: whoCanMessage
+        let privacySettings = {};
+        if (mentor.privacySettings) {
+           try {
+              privacySettings = typeof mentor.privacySettings === 'string' ? JSON.parse(mentor.privacySettings) : mentor.privacySettings;
+           } catch(e) {
+              privacySettings = mentor.privacySettings;
+           }
+        }
+        if (privacySettings.whoCanMessage === 'connections') {
+            return res.status(403).json({ status: "fail", message: "This mentor only accepts messages from established connections." });
+        }
+
         const existingRequest = await MessageRequest.findOne({
             where: { mentee_id: mentee.id, mentor_id: mentor.id }
         });
@@ -53,15 +67,16 @@ exports.sendMessageRequest = async (req, res) => {
             status: "pending"
         });
 
-        // Notify mentor
-        await Notification.create({
-            receiverId: mentor.id,
-            receiverType: "mentor",
-            senderId: userId,
-            message: `📩 New message request from ${req.user.name}`,
-            type: "message", // Adjusted to standard ENUM supported natively by the database
-            isRead: false,
-        });
+        // Check notification prefs for messages_app
+        let notifPrefs = {};
+        if (mentor.notifPrefs) {
+           try { notifPrefs = typeof mentor.notifPrefs === 'string' ? JSON.parse(mentor.notifPrefs) : mentor.notifPrefs; } catch(e) {}
+        }
+
+        if (notifPrefs.messages_app !== false) {
+           const mentorUser = await User.findByPk(mentor.user_id);
+           notificationService.sendMessageRequest(req.user, mentorUser, "mentor").catch(console.error);
+        }
 
         res.status(201).json({ status: "success", data: { request } });
     } catch (error) {
@@ -127,7 +142,7 @@ exports.respondToMessageRequest = async (req, res) => {
                 where: { mentorId: mentor.id, menteeId: request.mentee_id },
                 defaults: { status: "accepted" }
             });
-            
+
             // If connection exists but not accepted, update it
             const conn = await Connection.findOne({ where: { mentorId: mentor.id, menteeId: request.mentee_id } });
             if (conn && conn.status !== "accepted") {
@@ -136,15 +151,21 @@ exports.respondToMessageRequest = async (req, res) => {
             }
         }
 
-        // Notify mentee
-        await Notification.create({
-            receiverId: request.mentee_id,
-            receiverType: "mentee",
-            senderId: userId,
-            message: status === "accepted" ? "✅ Your message request was accepted!" : "❌ Your message request was declined.",
-            type: "update", // Adjusted to standard ENUM supported natively by the database
-            isRead: false,
-        });
+        const menteeObj = await Mentee.findByPk(request.mentee_id);
+        const menteeUser = await User.findByPk(menteeObj.user_id);
+
+        if (status === "accepted") {
+            notificationService.sendMessageRequestAccepted(req.user, menteeUser, "mentee").catch(console.error);
+        } else {
+            // Just standard in-app for declined, or use generic
+            await notificationService.sendNotification({
+              receiverId: request.mentee_id,
+              receiverType: "mentee",
+              type: "update",
+              title: "Message Request Declined",
+              message: "❌ Your message request was declined."
+            }).catch(console.error);
+        }
 
         res.status(200).json({ status: "success", data: { request } });
     } catch (error) {

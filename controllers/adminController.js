@@ -28,19 +28,27 @@ exports.getAllUsers = async (req, res) => {
 exports.getStats = async (req, res) => {
   try {
    const mentorsPending = await User.count({ where: { userType: "mentor", status: "pending" } });
-const mentorsApproved = await User.count({ where: { userType: "mentor", status: "approved" } });
+   const mentorsApproved = await User.count({ where: { userType: "mentor", status: "approved" } });
 
-// ✅ count rejected by status only, no matter userType
-const mentorsRejected = await User.count({ where: { status: "rejected" } });
+   // count rejected by status only, no matter userType
+   const mentorsRejected = await User.count({ where: { status: "rejected" } });
+   const mentees = await User.count({ where: { userType: "mentee" } });
 
-const mentees = await User.count({ where: { userType: "mentee" } });
+   const totalSessions = await Appointment.count();
 
+   const recentActivity = await AdminLog.findAll({
+     limit: 5,
+     order: [['createdAt', 'DESC']],
+     include: [{ model: User, as: 'admin', attributes: ['name', 'userType'] }]
+   });
 
     res.json({
       mentorsPending,
       mentorsApproved,
       mentorsRejected,
       mentees,
+      totalSessions,
+      recentActivity
     });
   } catch (error) {
     console.error("Error fetching stats:", error);
@@ -397,6 +405,117 @@ exports.deleteMentee = async (req, res) => {
     res.json({ message: "Mentee deleted successfully" });
   } catch (err) {
     console.error("Error deleting mentee:", err);
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+// --- Advanced User Actions ---
+
+const { AdminLog, Payment, Appointment, Report } = require('../models');
+
+exports.suspendUser = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.accountStatus = "suspended";
+    await user.save();
+
+    await AdminLog.create({
+      adminId,
+      action: "SUSPEND_USER",
+      targetId: id.toString(),
+      details: reason || "No reason provided"
+    });
+
+    res.json({ message: "User suspended successfully", user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.banUser = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { id } = req.params;
+    const { reason } = req.body;
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    user.accountStatus = "banned";
+    await user.save();
+
+    await AdminLog.create({
+      adminId,
+      action: "BAN_USER",
+      targetId: id.toString(),
+      details: reason || "No reason provided"
+    });
+
+    res.json({ message: "User banned successfully", user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.warnUser = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { id } = req.params;
+    const { message } = req.body;
+
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    await AdminLog.create({
+      adminId,
+      action: "WARN_USER",
+      targetId: id.toString(),
+      details: message
+    });
+
+    // In a real application, trigger an email or in-app notification to the user here.
+
+    res.json({ message: "User warned successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.getUserActivity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const user = await User.findByPk(id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    const sessions = await Appointment.findAll({
+      where: user.userType === 'mentor' ? { mentorId: id } : { menteeId: id },
+      order: [['createdAt', 'DESC']],
+      limit: 10
+    });
+
+    const payments = await Payment.findAll({
+      where: { userId: id },
+      order: [['createdAt', 'DESC']],
+      limit: 10
+    });
+
+    const reportsAgainst = await Report.findAll({
+      where: { reportedUserId: id },
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      sessions,
+      payments,
+      reportsAgainst
+    });
+  } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 };

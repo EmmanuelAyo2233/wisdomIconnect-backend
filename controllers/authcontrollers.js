@@ -7,9 +7,10 @@
     SECRET_KEY,
     jwt,
     Op,
-    streamFier,
-    cloudinary
   } = require("../config/reuseablePackages");
+  const notificationService = require("../services/notificationService");
+  const emailService = require("../services/emailService");
+  const crypto = require("crypto");
 
   // ------- helpers -------
   const wordCount = (text = "") =>
@@ -112,12 +113,15 @@
         }
 
         // Create user with pending status (mentor verification)
+        const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
         const newUser = await User.create({
           name: b.name,
           email: b.email,
           password: hashedPassword,
           userType: "mentor",
           status: "pending", // pending approval
+          verificationToken,
+          isVerified: false,
         });
 
         const shortBio = b.shortBio || b.bio || null;
@@ -140,9 +144,14 @@
       const userResponse = newUser.get({ plain: true });
       delete userResponse.password;
 
+      // Send Verification Email
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
+
       return res.status(201).json({
         status: "success",
-        message: "Mentor registration submitted. Your account is under review.",
+        requiresVerification: true,
+        email: b.email,
+        message: "Mentor registration submitted. Please verify your email.",
         banner: "Your account is under review. You’ll be available in search & bookings once approved.",
         data: { user: userResponse, mentor },
       });
@@ -171,12 +180,15 @@
       if (industries.length > 3) return res.status(400).json({ status: "fail", message: "Select up to 3 industries" });
       if (fluentIn.length > 5) return res.status(400).json({ status: "fail", message: "Select up to 5 fluent languages" });
 
+      const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
       const newUser = await User.create({
         name: b.name,
         email: b.email,
         password: hashedPassword,
         userType: "mentee",
         status: "approved", // mentees auto-approved
+        verificationToken,
+        isVerified: false,
       });
 
       const mentee = await Mentee.create({
@@ -193,9 +205,14 @@
       const userResponse = newUser.get({ plain: true });
       delete userResponse.password;
 
+      // Send Verification Email
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
+
       return res.status(201).json({
         status: "success",
-        message: "Mentee registration successful",
+        requiresVerification: true,
+        email: b.email,
+        message: "Mentee registration successful. Please verify your email.",
         data: { user: userResponse, mentee },
       });
     }
@@ -453,7 +470,187 @@ console.log("✅ Authenticated user:", {
     }
   };
 
-  const resetPassword = async (req, res) => { };
+  /**
+   * Step 1: User submits email → generate 6-digit OTP → send email
+   */
+  const forgotPassword = async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ status: 'fail', message: 'Email is required' });
+
+      const user = await User.findOne({ where: { email } });
+      // Always return success to prevent email enumeration
+      if (!user) {
+        return res.status(200).json({ status: 'success', message: 'If this email exists, a reset code has been sent.' });
+      }
+
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      // Expire in 15 minutes
+      const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      await user.update({ 
+        passwordResetToken: otp, 
+        passwordResetExpires: expiresAt 
+      });
+
+      // Send email
+      const templates = require('../utils/emailTemplates');
+      await emailService.sendEmail({
+        to: user.email,
+        subject: 'Your WisdomIconnect Password Reset Code',
+        html: templates.forgotPassword(user.name, otp)
+      });
+
+      return res.status(200).json({ status: 'success', message: 'Password reset code sent to your email.' });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      return res.status(500).json({ status: 'fail', message: 'Failed to process request' });
+    }
+  };
+
+  /**
+   * Step 2: User submits email + OTP + newPassword → validate OTP → update password
+   */
+  const resetPassword = async (req, res) => {
+    try {
+      const { email, otp, newPassword, confirmPassword } = req.body;
+
+      if (!email || !otp || !newPassword || !confirmPassword) {
+        return res.status(400).json({ status: 'fail', message: 'All fields are required' });
+      }
+
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ status: 'fail', message: 'Passwords do not match' });
+      }
+
+      if (String(newPassword).length < 8) {
+        return res.status(400).json({ status: 'fail', message: 'Password must be at least 8 characters' });
+      }
+
+      const user = await User.findOne({ where: { email } });
+      if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
+
+      if (!user.passwordResetToken || user.passwordResetToken !== otp) {
+        return res.status(400).json({ status: 'fail', message: 'Invalid reset code' });
+      }
+
+      if (!user.passwordResetExpires || new Date() > new Date(user.passwordResetExpires)) {
+        return res.status(400).json({ status: 'fail', message: 'Reset code has expired. Please request a new one.' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, salt);
+      await user.update({ 
+        password: hashedPassword, 
+        passwordResetToken: null, 
+        passwordResetExpires: null 
+      });
+
+      return res.status(200).json({ status: 'success', message: 'Password reset successfully. You can now log in.' });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      return res.status(500).json({ status: 'fail', message: 'Failed to reset password' });
+    }
+  };
+
+  const verifyEmail = async (req, res) => {
+    try {
+      // For POST requests from frontend, support req.body. For GET from email link, support req.query
+      const email = req.body.email || req.query.email;
+      const otp = req.body.otp || req.query.token;
+
+      if (!email || !otp) return res.status(400).json({ status: "fail", message: "Missing email or OTP" });
+
+      const user = await User.findOne({ 
+        where: { email },
+        include: [
+          { model: Mentor, as: "mentor", required: false },
+          { model: Mentee, as: "mentee", required: false },
+        ]
+      });
+
+      if (!user) return res.status(404).json({ status: "fail", message: "User not found" });
+      
+      // If already verified
+      if (user.isVerified) {
+         return res.status(400).json({ status: "fail", message: "Email already verified" });
+      }
+
+      if (user.verificationToken !== otp) {
+         return res.status(400).json({ status: "fail", message: "Invalid or expired OTP" });
+      }
+
+      await user.update({ isVerified: true, verificationToken: null });
+
+      // Send Welcome Notification now that they are verified
+      const userResponse = user.get({ plain: true });
+      delete userResponse.password;
+      notificationService.sendWelcomeNotification(userResponse, user.userType).catch(err => console.error(err));
+
+      // 💥 Automatically Log them in after verification! 💥
+      let banner = null;
+      if (user.userType === "mentor" && user.status === "pending") {
+        banner = "Your mentor account is under review. You’re not visible in search or bookings yet.";
+      }
+
+      const tokenPayload = {
+        id: user.id,
+        email: user.email,
+        userType: user.userType,
+        status: user.status
+      };
+      const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
+
+      return res.status(200).json({ 
+         status: "success", 
+         message: "Email verified successfully",
+         token,
+         banner,
+         user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            userType: user.userType,
+            picture: user.picture || null,
+            status: user.status,
+            isOnline: user.mentor ? user.mentor.isOnline : false,
+            expertise: user.mentor?.expertise,
+            linkedinUrl: user.mentor?.linkedinUrl,
+            bio: user.mentee?.bio ?? user.mentor?.bio,
+         }
+      });
+    } catch (error) {
+      console.error("Email verification error:", error);
+      res.status(500).json({ status: "fail", message: "Verification failed" });
+    }
+  };
+
+  const resendVerification = async (req, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ status: "fail", message: "Email is required" });
+
+      const user = await User.findOne({ where: { email } });
+      if (!user) return res.status(404).json({ status: "fail", message: "User not found" });
+
+      if (user.isVerified) {
+        return res.status(400).json({ status: "fail", message: "Email is already verified" });
+      }
+
+      const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+      await user.update({ verificationToken });
+
+      const userResponse = user.get({ plain: true });
+      delete userResponse.password;
+
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error(err));
+
+      return res.status(200).json({ status: "success", message: "Verification email resent successfully" });
+    } catch (error) {
+      console.error("Resend verification error:", error);
+      res.status(500).json({ status: "fail", message: "Failed to resend verification email" });
+    }
+  };
 
   module.exports = {
     signup,
@@ -463,5 +660,8 @@ console.log("✅ Authenticated user:", {
     restrictTo,
     approveMentor,
     rejectMentor,
+    forgotPassword,
     resetPassword,
+    verifyEmail,
+    resendVerification,
   };

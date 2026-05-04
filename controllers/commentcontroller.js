@@ -1,5 +1,5 @@
-const { User, Comment, Post } = require("../models");
-const { sendEmail } = require("./emailcontroller");
+const { User, Comment, Post, Mentor, Mentee } = require("../models");
+const notificationService = require("../services/notificationService");
 
 const getAllComment = async (req, res) => {
     try {
@@ -72,7 +72,13 @@ const createComment = async (req, res) => {
             createdAt: Date.now(),
         });
 
-        const postOwner = await User.findByPk(post.userId);
+        const postOwner = await User.findByPk(post.userId, {
+            include: [
+                { model: Mentor, as: 'mentor' },
+                { model: Mentee, as: 'mentee' }
+            ]
+        });
+
         if (!postOwner) {
             return res.status(404).json({
                 status: "fail",
@@ -80,27 +86,37 @@ const createComment = async (req, res) => {
             });
         }
 
-        const recipients = [
-            { email: user.email, name: user.name },
-            { email: postOwner.email, name: postOwner.name },
-        ];
+        // Notify the post owner if someone else commented
+        if (postOwner.id !== user.id) {
+            let receiverId = postOwner.id;
+            if (postOwner.userType === 'mentor' && postOwner.mentor) receiverId = postOwner.mentor.id;
+            if (postOwner.userType === 'mentee' && postOwner.mentee) receiverId = postOwner.mentee.id;
 
-        const result = await sendEmail(
-            recipients,
-            user.name,
-            "Post added Successfully",
-            JSON.stringify(newComment.content)
-        );
+            await notificationService.sendNotification({
+                receiverId: receiverId,
+                receiverType: postOwner.userType,
+                senderId: user.id,
+                type: 'general',
+                title: 'New Comment on your Playbook',
+                message: `${user.name} commented on your playbook.`,
+                link: `/playbooks/${post.id}`,
+                emailData: {
+                    to: postOwner.email,
+                    html: `<div style="font-family:sans-serif;color:#333;">
+                             <h2>New Comment on Your Playbook</h2>
+                             <p><b>${user.name}</b> just commented on your playbook:</p>
+                             <blockquote style="border-left:4px solid #f59e0b;padding-left:10px;color:#555;">${content}</blockquote>
+                             <p><a href="${process.env.FRONTEND_URL}/playbooks" style="color:#2563eb;font-weight:bold;">View Comment</a></p>
+                           </div>`
+                }
+            }).catch(err => console.error("Failed to send comment notification:", err));
+        }
 
         return res.status(201).json({
             status: "success",
-            message: result.success
-                ? "Comment created and email sent"
-                : "Comment created but email failed",
+            message: "Comment created successfully",
             data: {
                 comment: newComment,
-                emailInfo: result.info || null,
-                emailError: result.error?.message || null,
             },
         });
     } catch (error) {

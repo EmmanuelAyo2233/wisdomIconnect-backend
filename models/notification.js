@@ -63,7 +63,7 @@ const Notification = sequelize.define("notification", {
 
   senderId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true,
   },
 
   message: {
@@ -71,19 +71,29 @@ const Notification = sequelize.define("notification", {
     allowNull: false,
   },
 
+  title: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+
   receiverId: {
   type: DataTypes.INTEGER,
   allowNull: false,
 },
 
+link: {
+  type: DataTypes.STRING,
+  allowNull: true,
+},
+
 receiverType: {
-  type: DataTypes.ENUM("mentor", "mentee"),
+  type: DataTypes.ENUM("mentor", "mentee", "admin"),
   allowNull: false,
 },
 
 
   type: {
-    type: DataTypes.ENUM("booking", "message", "update", "system", "message_request", "message_request_response"),
+    type: DataTypes.ENUM("booking", "message", "update", "system", "message_request", "message_request_response", "payment", "auth", "general"),
     defaultValue: "booking",
   },
 

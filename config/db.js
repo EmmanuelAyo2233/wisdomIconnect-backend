@@ -43,6 +43,10 @@ sequelize
      
      // New for Topic Management
      sequelize.query("ALTER TABLE mentor ADD COLUMN topics JSON DEFAULT NULL;").catch(e=>{});
+     
+     // New for Gamification
+     sequelize.query("ALTER TABLE achievements ADD COLUMN role VARCHAR(255) DEFAULT NULL;").catch(e=>{});
+     sequelize.query("ALTER TABLE user_achievements ADD COLUMN role VARCHAR(255) DEFAULT 'mentee';").catch(e=>{});
   })
   .catch((err) => console.error("Database connection error:", err));
 

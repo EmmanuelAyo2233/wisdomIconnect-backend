@@ -23,4 +23,9 @@ router.put("/reconsider-mentor/:id", adminController.reconsiderMentor);
 router.get("/mentees", adminController.getMentees);
 router.delete("/mentee/:id", adminController.deleteMentee);
 
+router.post("/suspend-user/:id", adminController.suspendUser);
+router.post("/ban-user/:id", adminController.banUser);
+router.post("/warn-user/:id", adminController.warnUser);
+router.get("/user-activity/:id", adminController.getUserActivity);
+
 module.exports = router;

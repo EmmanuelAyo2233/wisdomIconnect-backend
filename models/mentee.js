@@ -18,6 +18,16 @@ const Mentee = sequelize.define(
         experience: { type: DataTypes.JSON, allowNull: true }, // store array of objects: {title, company, startDate, endDate, present}
         education: { type: DataTypes.JSON, allowNull: true }, // store array of objects
         phone: { type: DataTypes.STRING, allowNull: true },
+        notifPrefs: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            field: 'notif_prefs',
+        },
+        privacySettings: {
+            type: DataTypes.JSON,
+            allowNull: true,
+            field: 'privacy_settings',
+        },
     },
     {
         freezeTableName: true,

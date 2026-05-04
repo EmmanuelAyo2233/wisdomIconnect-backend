@@ -7,6 +7,9 @@ const getAllMentors = async (req, res) => {
     console.log("🔑 Logged-in mentee id:", req.user?.id);
 
     const mentors = await Mentor.findAll({
+      where: {
+        [Op.or]: [{ showInExplore: true }, { showInExplore: null }]
+      },
       include: [
         {
           model: User,
@@ -115,6 +118,22 @@ const getMentorsDetails = async (req, res) => {
       return res.status(404).json({ status: "fail", message: "Mentor not found" });
     }
 
+    // Enforce Privacy: profileVisibility
+    let privacySettings = {};
+    if (mentor.privacySettings) {
+      try {
+        privacySettings = typeof mentor.privacySettings === 'string' ? JSON.parse(mentor.privacySettings) : mentor.privacySettings;
+      } catch (e) {
+        privacySettings = mentor.privacySettings;
+      }
+    }
+    
+    // Allow access if it's the mentor themselves looking at their own profile, or if it's public.
+    const isOwner = req.user?.id === mentor.user_id;
+    if (!isOwner && privacySettings.profileVisibility === 'private') {
+      return res.status(403).json({ status: "fail", message: "This mentor's profile is private." });
+    }
+
     // Fetch appointments for metrics
     const appointments = await Appointment.findAll({
       where: { mentorId: mentor.id }
@@ -161,17 +180,21 @@ const getMentorsDetails = async (req, res) => {
     };
 
     // Fetch Gamification Badges
-    const userAchievements = await UserAchievement.findAll({
-        where: { user_id: mentor.user_id },
-        include: [{ model: Achievement, as: "achievement" }]
-    });
-    const achievementsList = userAchievements.map(ua => ({
-        id: ua.id,
-        title: ua.achievement?.title,
-        description: ua.achievement?.description,
-        icon: ua.achievement?.icon,
-        earned_at: ua.earned_at
-    }));
+    let achievementsList = [];
+    if (isOwner || privacySettings.showAchievements !== false) {
+        const userAchievements = await UserAchievement.findAll({
+            where: { user_id: mentor.user_id, role: "mentor" },
+            include: [{ model: Achievement, as: "achievement" }]
+        });
+        achievementsList = userAchievements.map(ua => ({
+            id: ua.id,
+            title: ua.achievement?.title,
+            description: ua.achievement?.description,
+            icon: ua.achievement?.icon,
+            criteria_type: ua.achievement?.criteria_type,
+            earned_at: ua.earned_at
+        }));
+    }
 
     const profile = {
       id: mentor.id,
@@ -201,7 +224,9 @@ const getMentorsDetails = async (req, res) => {
       minutesTrained: minutesTrained,
       menteesGuided: uniqueMentees.size,
       reviews: reviews,
-      achievements: achievementsList
+      achievements: achievementsList,
+      sessionPrice: mentor.showPricing !== false ? mentor.sessionPrice || 0 : null,
+      showPricing: mentor.showPricing !== false
     };
 
     res.status(200).json({ status: "success", data: profile });

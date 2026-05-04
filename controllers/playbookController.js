@@ -22,6 +22,20 @@ exports.createPlaybook = async (req, res) => {
             status: "pending",
         });
 
+        // Notify Admins
+        const adminUsers = await User.findAll({ where: { userType: 'admin' } });
+        if (adminUsers.length > 0) {
+           const adminNotifs = adminUsers.map(a => ({
+               receiverId: a.id,
+               receiverType: 'admin',
+               senderId: req.user.id,
+               message: `New Playbook "${title}" requires your approval.`,
+               type: "system",
+               link: "/admin/playbooks"
+           }));
+           await Notification.bulkCreate(adminNotifs);
+        }
+
         res.status(201).json({
             status: "success",
             data: { playbook },
@@ -194,11 +208,10 @@ exports.getPlaybookDetails = async (req, res) => {
     }
 };
 
-// 5. Get Pending Playbooks (Admin only)
-exports.getPendingPlaybooks = async (req, res) => {
+// 5. Get All Playbooks (Admin only)
+exports.getAdminPlaybooks = async (req, res) => {
     try {
         const playbooks = await Playbook.findAll({
-            where: { status: "pending" },
             include: [
                 {
                     model: User,
@@ -277,6 +290,28 @@ exports.deletePlaybook = async (req, res) => {
                 status: "fail",
                 message: "You do not have permission to delete this playbook",
             });
+        }
+
+        if (isAdmin && playbook.mentor_id !== req.user.id) {
+             playbook.status = "rejected";
+             await playbook.save();
+             
+             const mentor = await Mentor.findOne({ where: { user_id: playbook.mentor_id } });
+             if (mentor) {
+                 await Notification.create({
+                     receiverId: mentor.id,
+                     receiverType: "mentor",
+                     senderId: req.user.id,
+                     message: "Your playbook was rejected.",
+                     type: "system",
+                     isRead: false,
+                 });
+             }
+             
+             return res.status(200).json({
+                status: "success",
+                message: "Playbook rejected",
+             });
         }
 
         await playbook.destroy();
@@ -534,7 +569,7 @@ exports.addPlaybookComment = async (req, res) => {
 
             if (targetUserId) {
                 const targetUser = await User.findByPk(targetUserId, {
-                   attributes: ['id', 'userType']
+                   attributes: ['id', 'userType', 'email', 'name']
                 });
                 
                 if (targetUser) {
@@ -548,13 +583,24 @@ exports.addPlaybookComment = async (req, res) => {
                     }
                     
                     if (receiverId) {
-                        await Notification.create({
+                        const notificationService = require("../services/notificationService");
+                        await notificationService.sendNotification({
                             receiverId: receiverId,
                             receiverType: targetUser.userType,
                             senderId: userId,
-                            message: notifyMsg,
                             type: "update",
-                            isRead: false
+                            title: parent_id ? "New Reply to Your Comment" : "New Comment on Your Playbook",
+                            message: notifyMsg,
+                            link: `/playbooks/${playbook.id}`,
+                            emailData: {
+                                to: targetUser.email,
+                                html: `<div style="font-family:sans-serif;color:#333;">
+                                         <h2>${parent_id ? "New Reply on WisdomIconnect" : "New Comment on WisdomIconnect"}</h2>
+                                         <p><b>${req.user.name || 'Someone'}</b> ${parent_id ? 'replied to your comment' : `commented on your playbook "${playbook.title}"`}:</p>
+                                         <blockquote style="border-left:4px solid #f59e0b;padding-left:10px;color:#555;">${content}</blockquote>
+                                         <p><a href="${process.env.FRONTEND_URL}/playbooks/${playbook.id}" style="color:#2563eb;font-weight:bold;">View on WisdomIconnect</a></p>
+                                       </div>`
+                            }
                         });
                     }
                 }
