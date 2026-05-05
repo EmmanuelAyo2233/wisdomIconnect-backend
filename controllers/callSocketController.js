@@ -1,5 +1,5 @@
 exports.setupCallSocket = (io) => {
-    io.on("connection", (socket) => {
+    io.of("/chat").on("connection", (socket) => {
         // console.log("User connected to call socket:", socket.id);
 
         socket.on("joinRoom", ({ meetingId, userId, role }) => {

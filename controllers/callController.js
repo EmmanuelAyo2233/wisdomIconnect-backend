@@ -41,12 +41,12 @@ exports.verifyCallAccess = async (req, res) => {
         const diffMs = sessionStartTime.getTime() - currentTime.getTime();
         const diffMinutes = Math.floor(diffMs / 60000);
 
-        if (diffMinutes > 60) {
-            return res.status(403).json({ 
-                status: "fail", 
-                message: `Too early. You can join 60 minutes before the scheduled time (${appointment.startTime}).` 
-            });
-        }
+        // if (diffMinutes > 60) {
+        //     return res.status(403).json({ 
+        //         status: "fail", 
+        //         message: `Too early. You can join 60 minutes before the scheduled time (${appointment.startTime}).` 
+        //     });
+        // }
 
         // Payment validation
         const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
@@ -65,7 +65,9 @@ exports.verifyCallAccess = async (req, res) => {
                 appointmentId: appointment.id,
                 meetingId: appointment.meetingId,
                 role: role,
-                endTime: appointment.endTime
+                startTime: appointment.startTime,
+                endTime: appointment.endTime,
+                callStartedAt: appointment.callStartedAt
             }
         });
     } catch (error) {
