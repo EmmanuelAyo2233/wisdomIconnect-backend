@@ -41,10 +41,10 @@ exports.verifyCallAccess = async (req, res) => {
         const diffMs = sessionStartTime.getTime() - currentTime.getTime();
         const diffMinutes = Math.floor(diffMs / 60000);
 
-        if (diffMinutes > 5) {
+        if (diffMinutes > 60) {
             return res.status(403).json({ 
                 status: "fail", 
-                message: `Too early. You can join 5 minutes before the scheduled time (${appointment.startTime}).` 
+                message: `Too early. You can join 60 minutes before the scheduled time (${appointment.startTime}).` 
             });
         }
 
