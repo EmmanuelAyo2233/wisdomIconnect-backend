@@ -44,6 +44,8 @@ const corsOptions = {
         "http://127.0.0.1:5173",
         "http://localhost:5173",
         "https://wisdom-iconnect.vercel.app",
+        "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
+        /\.vercel\.app$/, // Allows any Vercel preview branch
         FRONTEND_URL,
     ].filter(Boolean),
     credentials: true,
@@ -73,6 +75,8 @@ const io = new Server(server, {
             "http://127.0.0.1:5173",
             "http://localhost:5173",
             "https://wisdom-iconnect.vercel.app",
+            "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
+            /\.vercel\.app$/, // Allows any Vercel preview branch
             FRONTEND_URL,
         ],
         credentials: true,
