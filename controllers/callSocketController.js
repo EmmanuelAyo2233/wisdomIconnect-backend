@@ -30,6 +30,11 @@ exports.setupCallSocket = (io) => {
             socket.to(meetingId).emit("forceVideoOff");
         });
 
+        // Relay media state changes (camera/mic/screen share toggle)
+        socket.on("mediaStateChanged", ({ meetingId, ...state }) => {
+            socket.to(meetingId).emit("mediaStateChanged", state);
+        });
+
         // In-call chat message
         socket.on("callChatMessage", ({ meetingId, message }) => {
             // Broadcast to all others in the room
