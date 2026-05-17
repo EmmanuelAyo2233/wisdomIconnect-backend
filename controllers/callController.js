@@ -58,6 +58,10 @@ exports.verifyCallAccess = async (req, res) => {
             }
         }
 
+        // Fetch participant details for display
+        const mentor = await Mentor.findOne({ where: { id: appointment.mentorId }, include: [{ model: require("../models").User, as: "user", attributes: ["firstName", "lastName", "picture"] }] });
+        const mentee = await Mentee.findOne({ where: { id: appointment.menteeId }, include: [{ model: require("../models").User, as: "user", attributes: ["firstName", "lastName", "picture"] }] });
+
         return res.status(200).json({
             status: "success",
             message: "Access granted ✅",
@@ -67,7 +71,9 @@ exports.verifyCallAccess = async (req, res) => {
                 role: role,
                 startTime: appointment.startTime,
                 endTime: appointment.endTime,
-                callStartedAt: appointment.callStartedAt
+                callStartedAt: appointment.callStartedAt,
+                mentor: mentor?.user ? { firstName: mentor.user.firstName, lastName: mentor.user.lastName, picture: mentor.user.picture } : null,
+                mentee: mentee?.user ? { firstName: mentee.user.firstName, lastName: mentee.user.lastName, picture: mentee.user.picture } : null,
             }
         });
     } catch (error) {
