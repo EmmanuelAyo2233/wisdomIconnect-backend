@@ -1,6 +1,5 @@
 exports.setupCallSocket = (io) => {
     io.of("/chat").on("connection", (socket) => {
-        // console.log("User connected to call socket:", socket.id);
 
         socket.on("joinRoom", ({ meetingId, userId, role }) => {
             socket.join(meetingId);
@@ -20,8 +19,7 @@ exports.setupCallSocket = (io) => {
         });
 
         socket.on("endCall", ({ meetingId }) => {
-            // Terminate session for all in room
-            io.to(meetingId).emit("callEnded");
+            io.of("/chat").to(meetingId).emit("callEnded");
         });
 
         socket.on("forceMute", ({ meetingId }) => {
@@ -30,6 +28,12 @@ exports.setupCallSocket = (io) => {
 
         socket.on("forceVideoOff", ({ meetingId }) => {
             socket.to(meetingId).emit("forceVideoOff");
+        });
+
+        // In-call chat message
+        socket.on("callChatMessage", ({ meetingId, message }) => {
+            // Broadcast to all others in the room
+            socket.to(meetingId).emit("callChatMessage", message);
         });
 
         socket.on("leaveRoom", ({ meetingId, userId }) => {
