@@ -59,8 +59,8 @@ exports.verifyCallAccess = async (req, res) => {
         }
 
         // Fetch participant details for display
-        const mentor = await Mentor.findOne({ where: { id: appointment.mentorId }, include: [{ model: require("../models").User, as: "user", attributes: ["firstName", "lastName", "picture"] }] });
-        const mentee = await Mentee.findOne({ where: { id: appointment.menteeId }, include: [{ model: require("../models").User, as: "user", attributes: ["firstName", "lastName", "picture"] }] });
+        const mentor = await Mentor.findOne({ where: { id: appointment.mentorId }, include: [{ model: require("../models").User, as: "user", attributes: ["name", "picture"] }] });
+        const mentee = await Mentee.findOne({ where: { id: appointment.menteeId }, include: [{ model: require("../models").User, as: "user", attributes: ["name", "picture"] }] });
 
         return res.status(200).json({
             status: "success",
@@ -72,8 +72,8 @@ exports.verifyCallAccess = async (req, res) => {
                 startTime: appointment.startTime,
                 endTime: appointment.endTime,
                 callStartedAt: appointment.callStartedAt,
-                mentor: mentor?.user ? { firstName: mentor.user.firstName, lastName: mentor.user.lastName, picture: mentor.user.picture } : null,
-                mentee: mentee?.user ? { firstName: mentee.user.firstName, lastName: mentee.user.lastName, picture: mentee.user.picture } : null,
+                mentor: mentor?.user ? { name: mentor.user.name, picture: mentor.user.picture } : null,
+                mentee: mentee?.user ? { name: mentee.user.name, picture: mentee.user.picture } : null,
             }
         });
     } catch (error) {
