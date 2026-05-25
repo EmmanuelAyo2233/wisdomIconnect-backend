@@ -100,6 +100,11 @@ const Appointment = sequelize.define(
       defaultValue: false,
       field: "autoCompleted",
     },
+    duration: {
+      type: DataTypes.INTEGER,
+      defaultValue: 0,
+      field: "duration",
+    },
     createdAt: {
       type: DataTypes.DATEONLY,
       allowNull: true,

@@ -94,6 +94,11 @@ exports.markSessionComplete = async (req, res) => {
         const appointment = await Appointment.findByPk(appointmentId);
         if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
 
+        // If already completed, return success cleanly
+        if (appointment.status === "completed") {
+            return res.status(200).json({ status: "success", message: "Session already completed ✅", data: appointment });
+        }
+
         if (role === "mentor") {
             const mentor = await Mentor.findOne({ where: { user_id: userId } });
             if (!mentor || appointment.mentorId !== mentor.id) {
@@ -109,9 +114,22 @@ exports.markSessionComplete = async (req, res) => {
         }
 
         let completedNow = false;
-        if (appointment.mentorConfirmed && appointment.menteeConfirmed && appointment.status !== "completed") {
+        if (appointment.status !== "completed") {
             appointment.status = "completed";
             appointment.callEndedAt = new Date();
+            
+            if (!appointment.callStartedAt) {
+                appointment.callStartedAt = appointment.createdAt || new Date();
+            }
+
+            // Set duration
+            if (req.body.duration) {
+                appointment.duration = parseInt(req.body.duration, 10);
+            } else {
+                const diffMs = appointment.callEndedAt - appointment.callStartedAt;
+                appointment.duration = Math.max(1, Math.round(diffMs / 60000));
+            }
+
             completedNow = true;
         }
 
@@ -195,7 +213,7 @@ exports.markSessionComplete = async (req, res) => {
 exports.submitReview = async (req, res) => {
     try {
         const { appointmentId } = req.params;
-        const { rating, comment } = req.body;
+        const { rating, comment, teachingQuality, communication, helpfulness, recommend } = req.body;
         const userId = req.user.id;
 
         const mentee = await Mentee.findOne({ where: { user_id: userId } });
@@ -207,9 +225,21 @@ exports.submitReview = async (req, res) => {
         const existingReview = await Review.findOne({ where: { appointmentId: appointment.id } });
         if (existingReview) return res.status(400).json({ status: "fail", message: "Review already submitted ❌" });
 
+        // Serialize structured feedback questionnaire inside the comment column
+        let finalizedComment = comment;
+        if (teachingQuality !== undefined || communication !== undefined || helpfulness !== undefined || recommend !== undefined) {
+            finalizedComment = JSON.stringify({
+                text: comment || "",
+                teachingQuality: teachingQuality || 0,
+                communication: communication || 0,
+                helpfulness: helpfulness || 0,
+                recommend: recommend !== undefined ? recommend : true
+            });
+        }
+
         const review = await Review.create({
-            rating,
-            comment,
+            rating: rating || 5,
+            comment: finalizedComment,
             appointmentId: appointment.id,
             mentorId: appointment.mentorId,
             menteeId: mentee.id,
@@ -245,7 +275,7 @@ exports.submitReview = async (req, res) => {
 exports.submitCommendation = async (req, res) => {
     try {
         const { appointmentId } = req.params;
-        const { commendation, rating } = req.body;
+        const { commendation, rating, strengths, areasToImprove, notes, recommendNextClass } = req.body;
         const userId = req.user.id;
 
         const mentor = await Mentor.findOne({ where: { user_id: userId } });
@@ -257,9 +287,21 @@ exports.submitCommendation = async (req, res) => {
         const existingCommendation = await MentorCommendation.findOne({ where: { appointmentId: appointment.id } });
         if (existingCommendation) return res.status(400).json({ status: "fail", message: "Commendation already submitted ❌" });
 
+        // Serialize structured commendation feedback inside the commendation column
+        let finalizedCommendation = commendation;
+        if (strengths !== undefined || areasToImprove !== undefined || notes !== undefined || recommendNextClass !== undefined) {
+            finalizedCommendation = JSON.stringify({
+                text: commendation || "",
+                strengths: strengths || "",
+                areasToImprove: areasToImprove || "",
+                notes: notes || "",
+                recommendNextClass: recommendNextClass || ""
+            });
+        }
+
         const newCommendation = await MentorCommendation.create({
-            commendation,
-            rating,
+            commendation: finalizedCommendation,
+            rating: rating || 5,
             appointmentId: appointment.id,
             mentorId: mentor.id,
             menteeId: appointment.menteeId,

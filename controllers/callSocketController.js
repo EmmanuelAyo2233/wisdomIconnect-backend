@@ -35,6 +35,16 @@ exports.setupCallSocket = (io) => {
             socket.to(meetingId).emit("mediaStateChanged", state);
         });
 
+        // Relay hand raising event
+        socket.on("raiseHand", ({ meetingId, userId, isRaised }) => {
+            socket.to(meetingId).emit("raiseHand", { userId, isRaised });
+        });
+
+        // Relay emoji reactions
+        socket.on("emojiReaction", ({ meetingId, userId, emoji }) => {
+            socket.to(meetingId).emit("emojiReaction", { userId, emoji });
+        });
+
         // In-call chat message
         socket.on("callChatMessage", ({ meetingId, message }) => {
             // Broadcast to all others in the room

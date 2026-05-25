@@ -193,6 +193,16 @@ db.sequelize.sync() // creates missing tables but avoids complex alterations to 
             console.error("Note: could not patch notifications table.");
         }
 
+        // Safely add duration column to appointment table
+        try {
+            await db.sequelize.query("ALTER TABLE `appointment` ADD COLUMN `duration` INT DEFAULT 0;");
+            console.log("✅ duration column added to appointment table");
+        } catch (err) {
+            if (err.original && err.original.errno !== 1060) {
+                console.error("Note: duration column already exists or could not be added.");
+            }
+        }
+
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
