@@ -62,6 +62,22 @@ exports.verifyCallAccess = async (req, res) => {
         const mentor = await Mentor.findOne({ where: { id: appointment.mentorId }, include: [{ model: require("../models").User, as: "user", attributes: ["name", "picture"] }] });
         const mentee = await Mentee.findOne({ where: { id: appointment.menteeId }, include: [{ model: require("../models").User, as: "user", attributes: ["name", "picture"] }] });
 
+        // Calculate duration from startTime and endTime if not explicitly saved as duration
+        let durationMinutes = appointment.duration || 60; // Default fallback
+        if (appointment.startTime && appointment.endTime) {
+            try {
+                const [sh, sm] = appointment.startTime.split(":").map(Number);
+                const [eh, em] = appointment.endTime.split(":").map(Number);
+                const startTotal = sh * 60 + sm;
+                const endTotal = eh * 60 + em;
+                if (endTotal > startTotal) {
+                    durationMinutes = endTotal - startTotal;
+                }
+            } catch (e) {
+                console.warn("Failed to parse start/end time:", e);
+            }
+        }
+
         return res.status(200).json({
             status: "success",
             message: "Access granted ✅",
@@ -72,6 +88,7 @@ exports.verifyCallAccess = async (req, res) => {
                 startTime: appointment.startTime,
                 endTime: appointment.endTime,
                 callStartedAt: appointment.callStartedAt,
+                duration: durationMinutes,
                 mentor: mentor?.user ? { name: mentor.user.name, picture: mentor.user.picture } : null,
                 mentee: mentee?.user ? { name: mentee.user.name, picture: mentee.user.picture } : null,
             }

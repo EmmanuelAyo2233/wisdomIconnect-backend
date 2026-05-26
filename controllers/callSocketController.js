@@ -19,7 +19,8 @@ exports.setupCallSocket = (io) => {
         });
 
         socket.on("endCall", ({ meetingId }) => {
-            io.of("/chat").to(meetingId).emit("callEnded");
+            // Broadcast only to OTHER participants in the room, not back to the caller
+            socket.to(meetingId).emit("callEnded");
         });
 
         socket.on("forceMute", ({ meetingId }) => {
