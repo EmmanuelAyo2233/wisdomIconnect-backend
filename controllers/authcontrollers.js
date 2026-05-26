@@ -1,5 +1,5 @@
-  // controllers/authController.js
   const { User, Mentee, Mentor } = require("../models");
+  const { logActivity } = require("../services/activityLogger");
   const {
     bcrypt,
     EMAIL_REGEX,
@@ -147,6 +147,13 @@
       // Send Verification Email
       notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
 
+      logActivity({
+        type: "USER",
+        message: `Mentor registration submitted: ${b.name} (${b.email})`,
+        userId: newUser.id,
+        status: "success"
+      });
+
       return res.status(201).json({
         status: "success",
         requiresVerification: true,
@@ -207,6 +214,13 @@
 
       // Send Verification Email
       notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
+
+      logActivity({
+        type: "USER",
+        message: `Mentee registration successful: ${b.name} (${b.email})`,
+        userId: newUser.id,
+        status: "success"
+      });
 
       return res.status(201).json({
         status: "success",
@@ -278,6 +292,13 @@ if (user.userType === "mentor") {
   }
 }
 
+      logActivity({
+        type: "USER",
+        message: `User logged in: ${user.name} (${user.email})`,
+        userId: user.id,
+        status: "success"
+      });
+
 // Optional: log what you're sending
 return res.status(200).json({
   status: "success",
@@ -320,6 +341,13 @@ const logout = async (req, res) => {
         { where: { user_id: id } }
       );
     }
+
+    logActivity({
+      type: "USER",
+      message: `User logged out: ${req.user.name} (${req.user.email})`,
+      userId: id,
+      status: "success"
+    });
 
     res.status(200).json({ status: "success", message: "Logged out" });
   } catch (err) {
@@ -581,6 +609,13 @@ console.log("✅ Authenticated user:", {
       }
 
       await user.update({ isVerified: true, verificationToken: null });
+
+      logActivity({
+        type: "USER",
+        message: `Email verified successfully: ${user.name} (${user.email})`,
+        userId: user.id,
+        status: "success"
+      });
 
       // Send Welcome Notification now that they are verified
       const userResponse = user.get({ plain: true });

@@ -9,6 +9,7 @@ const Review = require("../models/review");
 const MentorCommendation = require("../models/mentorCommendation");
 const { v4: uuidv4 } = require("uuid");
 const notificationService = require("../services/notificationService");
+const { logActivity } = require("../services/activityLogger");
 
 // =====================
 // 📅 MENTEE ACTIONS
@@ -232,6 +233,19 @@ if (!existingConn) {
   existingConn.status = "accepted";
   await existingConn.save();
 }
+    logActivity({
+      type: "BOOKING",
+      message: `${req.user.name} booked a session with Mentor ID ${appointment.mentorId} on ${appointment.date} at ${appointment.startTime}`,
+      userId: req.user.id,
+      targetId: appointment.id,
+      status: "success",
+      metadata: {
+        mentorId: appointment.mentorId,
+        topic: appointment.topic,
+        sessionType: appointment.sessionType,
+        amount: appointment.sessionAmount
+      }
+    });
     res.status(201).json({
       status: "success",
       message: "Appointment booked successfully ✅ Slot marked as booked 🔔",
@@ -297,6 +311,20 @@ exports.cancelAppointment = async (req, res) => {
            }).catch(console.error);
         }
     }
+
+    logActivity({
+      type: "BOOKING",
+      message: `${req.user.name} cancelled the session (Appointment ID ${appointment.id})`,
+      userId: req.user.id,
+      targetId: appointment.id,
+      status: "success",
+      metadata: {
+        appointmentId: appointment.id,
+        mentorId: appointment.mentorId,
+        date: appointment.date,
+        startTime: appointment.startTime
+      }
+    });
 
     res.status(200).json({
       status: "success",
@@ -532,6 +560,20 @@ exports.acceptAppointment = async (req, res) => {
 
 
 
+    logActivity({
+      type: "BOOKING",
+      message: `Mentor ${req.user.name} approved the session request (Appointment ID ${appointment.id})`,
+      userId: req.user.id,
+      targetId: appointment.id,
+      status: "success",
+      metadata: {
+        appointmentId: appointment.id,
+        menteeId: appointment.menteeId,
+        date: appointment.date,
+        startTime: appointment.startTime
+      }
+    });
+
     res.json({ status: "success", message: "Appointment accepted successfully ✅", data: appointment });
   } catch (error) {
     console.error("❌ Accept appointment error:", error);
@@ -578,6 +620,20 @@ exports.rejectAppointment = async (req, res) => {
       }
     }).catch(console.error);
 
+    logActivity({
+      type: "BOOKING",
+      message: `Mentor ${req.user.name} declined the session request (Appointment ID ${appointment.id})`,
+      userId: req.user.id,
+      targetId: appointment.id,
+      status: "success",
+      metadata: {
+        appointmentId: appointment.id,
+        menteeId: appointment.menteeId,
+        date: appointment.date,
+        startTime: appointment.startTime
+      }
+    });
+
     res.status(200).json({ status: "success", message: "Appointment rejected ✅", data: appointment });
   } catch (error) {
     console.error("❌ Reject appointment error:", error);
@@ -621,6 +677,20 @@ exports.mentorRescheduleAppointment = async (req, res) => {
          html: require("../utils/emailTemplates").sessionReminder(menteeUser.name, mentor.user?.name || "Your mentor", `${appointment.date} at ${appointment.startTime}`, appointment.meetingLink || "#")
       }
     }).catch(console.error);
+
+    logActivity({
+      type: "BOOKING",
+      message: `Mentor ${req.user.name} rescheduled the session (Appointment ID ${appointment.id}) to ${appointment.date} at ${appointment.startTime}`,
+      userId: req.user.id,
+      targetId: appointment.id,
+      status: "success",
+      metadata: {
+        appointmentId: appointment.id,
+        newDate: appointment.date,
+        newStartTime: appointment.startTime,
+        rescheduleReason: appointment.rescheduleReason
+      }
+    });
 
     res.status(200).json({ status: "success", message: "Appointment rescheduled ✅", data: appointment });
   } catch (error) {

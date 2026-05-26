@@ -115,6 +115,9 @@ app.use(`${API_URL}/sessions`, sessionRoutes);
 
 app.use(`${API_URL}/payments`, paymentRoutes);
 
+const activityRoutes = require("./routes/activityRoutes");
+app.use(`${API_URL}/activity`, activityRoutes);
+
 app.use(`${API_URL}/call`, callRoutes);
 
 const wishlistRoutes = require("./routes/wishlistRoutes");

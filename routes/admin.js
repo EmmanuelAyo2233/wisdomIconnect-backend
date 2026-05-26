@@ -34,4 +34,8 @@ router.get("/commendations", adminController.getCommendationsForAdmin);
 router.get("/disputes", adminController.getDisputedSessions);
 router.put("/disputes/:appointmentId/resolve", adminController.resolveDispute);
 
+// Platform Activity Audit Logs routes
+router.get("/activity", adminController.getActivities);
+router.get("/activity/recent", adminController.getRecentActivities);
+
 module.exports = router;

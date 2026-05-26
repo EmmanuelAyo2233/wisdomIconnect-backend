@@ -2,6 +2,7 @@ const axios = require('axios');
 const { Wallet, Payment, Appointment, Mentor, Mentee, User, Withdrawal } = require('../models');
 const { Op } = require('sequelize');
 const notificationService = require("../services/notificationService");
+const { logActivity } = require("../services/activityLogger");
 
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197';
 
@@ -73,6 +74,21 @@ exports.verifyPayment = async (req, res) => {
                `Session with ${appointment.mentor.user.name}`
            ).catch(console.error);
         }
+
+        logActivity({
+            type: "PAYMENT",
+            message: `Payment of ₦${amountNaira.toLocaleString()} verified for Session (Appointment ID: ${appointment.id}) by Mentee ID ${appointment.mentee.id}`,
+            userId: appointment.mentee.user_id,
+            targetId: payment.id,
+            status: "success",
+            metadata: {
+                reference,
+                amount: amountNaira,
+                mentorShare,
+                platformShare,
+                appointmentId: appointment.id
+            }
+        });
 
         res.status(200).json({ success: true, message: "Payment verified successfully", payment });
     } catch (err) {
@@ -165,7 +181,17 @@ exports.requestRefund = async (req, res) => {
             if (payment) {
                 payment.status = 'disputed';
                 await payment.save();
-            }
+            logActivity({
+                type: "PAYMENT",
+                message: `Refund dispute opened for Session (Appointment ID ${appointment.id})`,
+                userId: userId,
+                targetId: payment ? payment.id : null,
+                status: "pending",
+                metadata: {
+                    appointmentId,
+                    amount: payment ? payment.amount : 0
+                }
+            });
             return res.status(200).json({ success: true, message: "Session disputed. Admin will resolve." });
         }
 
@@ -208,6 +234,18 @@ exports.requestRefund = async (req, res) => {
             }
         }
 
+        logActivity({
+            type: "PAYMENT",
+            message: `Refund of ₦${payment ? payment.amount.toLocaleString() : '0'} processed successfully for Appointment ID ${appointment.id}`,
+            userId: userId,
+            targetId: payment ? payment.id : null,
+            status: "success",
+            metadata: {
+                appointmentId,
+                amount: payment ? payment.amount : 0
+            }
+        });
+
         res.status(200).json({ success: true, message: "Refund processed successfully." });
     } catch (err) {
         console.error("Refund error:", err);
@@ -245,6 +283,18 @@ exports.withdrawFunds = async (req, res) => {
         if (user) {
             notificationService.sendPayoutProcessed(user, `₦${amount.toLocaleString()}`).catch(console.error);
         }
+
+        logActivity({
+            type: "PAYMENT",
+            message: `Mentor initiated a withdrawal of ₦${amount.toLocaleString()}`,
+            userId: userId,
+            targetId: mentor.id,
+            status: "success",
+            metadata: {
+                amount,
+                newBalance: wallet.availableBalance
+            }
+        });
 
         res.status(200).json({ success: true, message: "Withdrawal successful", newBalance: wallet.availableBalance });
     } catch (err) {

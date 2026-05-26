@@ -2,6 +2,7 @@ const { Appointment, Mentor, Mentee, User, Review, MentorCommendation, Payment, 
 const Achievement = require("../models/achievement");
 const UserAchievement = require("../models/userAchievement");
 const { Op } = require("sequelize");
+const { logActivity } = require("../services/activityLogger");
 
 /**
  * Dynamic achievement awarding system.
@@ -265,6 +266,32 @@ exports.joinSession = async (req, res) => {
         }
 
         await appointment.save();
+
+        logActivity({
+            type: "SESSION",
+            message: `${req.user.name} (${role}) joined session (Appointment ID ${appointment.id})`,
+            userId,
+            targetId: appointment.id,
+            status: "success",
+            metadata: {
+                role,
+                appointmentId
+            }
+        });
+
+        if (appointment.mentorJoinTime && appointment.menteeJoinTime && appointment.status === "ongoing") {
+            logActivity({
+                type: "SESSION",
+                message: `Session is now live (ongoing) for Appointment ID ${appointment.id}`,
+                userId: null,
+                targetId: appointment.id,
+                status: "success",
+                metadata: {
+                    appointmentId
+                }
+            });
+        }
+
         res.status(200).json({ status: "success", message: "Joined session successfully ✅", data: appointment });
     } catch (error) {
         console.error("❌ Join session error:", error);
@@ -331,6 +358,17 @@ exports.endSession = async (req, res) => {
         // Auto-complete free sessions
         if (appointment.sessionType === "free") {
             await performSessionCompletion(appointment, "automatic");
+            logActivity({
+                type: "SESSION",
+                message: `Free session completed successfully (Appointment ID ${appointment.id})`,
+                userId,
+                targetId: appointment.id,
+                status: "success",
+                metadata: {
+                    appointmentId,
+                    sessionType: "free"
+                }
+            });
             return res.status(200).json({
                 status: "success",
                 message: "Free session completed successfully ✅",
@@ -354,6 +392,20 @@ exports.endSession = async (req, res) => {
                 await payment.save();
             }
 
+            logActivity({
+                type: "SESSION",
+                message: `Session early end dispute triggered for Appointment ID ${appointment.id} (Under 70% threshold)`,
+                userId,
+                targetId: appointment.id,
+                status: "failed",
+                metadata: {
+                    appointmentId,
+                    scheduledMinutes,
+                    actualMinutes,
+                    threshold
+                }
+            });
+
             return res.status(200).json({
                 status: "success",
                 message: "Session ended early and marked under review. Escrow locked 🔒",
@@ -363,6 +415,19 @@ exports.endSession = async (req, res) => {
         } else {
             // Threshold met -> Auto-Complete and release escrow immediately!
             await performSessionCompletion(appointment, "automatic");
+            logActivity({
+                type: "SESSION",
+                message: `Paid session completed successfully and payout released (Appointment ID ${appointment.id})`,
+                userId,
+                targetId: appointment.id,
+                status: "success",
+                metadata: {
+                    appointmentId,
+                    scheduledMinutes,
+                    actualMinutes,
+                    sessionType: "paid"
+                }
+            });
             return res.status(200).json({
                 status: "success",
                 message: "Session completed successfully. Payout released! ✅",

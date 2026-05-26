@@ -34,6 +34,7 @@ const RefundRequest = require("./refundRequest");
 const Announcement = require("./announcement");
 const PlatformSetting = require("./platformSetting");
 const AdminLog = require("./adminLog");
+const Activity = require("./activity");
 
 const sequelize = require("../config/db");
 
@@ -170,6 +171,9 @@ Announcement.belongsTo(User, { foreignKey: "adminId", as: "admin" });
 User.hasMany(AdminLog, { foreignKey: "adminId", as: "adminLogs" });
 AdminLog.belongsTo(User, { foreignKey: "adminId", as: "admin" });
 
+User.hasMany(Activity, { foreignKey: "userId", as: "activities" });
+Activity.belongsTo(User, { foreignKey: "userId", as: "user" });
+
 module.exports = {
     db,
     User,
@@ -201,4 +205,5 @@ module.exports = {
     Announcement,
     PlatformSetting,
     AdminLog,
+    Activity,
 };

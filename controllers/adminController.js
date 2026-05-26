@@ -707,3 +707,138 @@ exports.resolveDispute = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// --- Get all activities with advanced search and filters
+exports.getActivities = async (req, res) => {
+  try {
+    const { 
+      page = 1, 
+      limit = 20, 
+      search = "", 
+      type = "ALL", 
+      status = "ALL", 
+      dateRange = "ALL", 
+      startDate, 
+      endDate, 
+      sort = "newest" 
+    } = req.query;
+
+    const { Op } = require("sequelize");
+    const Activity = require("../models/activity");
+
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    const whereClause = {};
+
+    // 1. Activity Type Filter
+    if (type && type !== "ALL") {
+      const typeMapping = {
+        "BOOKINGS": "BOOKING",
+        "BOOKING": "BOOKING",
+        "PAYMENTS": "PAYMENT",
+        "PAYMENT": "PAYMENT",
+        "SESSIONS": "SESSION",
+        "SESSION": "SESSION",
+        "USERS": "USER",
+        "USER": "USER",
+        "SYSTEM": "SYSTEM"
+      };
+      const enumType = typeMapping[type.toUpperCase()];
+      if (enumType) {
+        whereClause.type = enumType;
+      }
+    }
+
+    // 2. Status Filter
+    if (status && status !== "ALL") {
+      whereClause.status = status;
+    }
+
+    // 3. Date Range Filter
+    if (dateRange && dateRange !== "ALL") {
+      const now = new Date();
+      if (dateRange === "today") {
+        const todayStart = new Date(now.setHours(0,0,0,0));
+        whereClause.createdAt = { [Op.gte]: todayStart };
+      } else if (dateRange === "last 7 days") {
+        const sevenDaysAgo = new Date(now.setDate(now.getDate() - 7));
+        whereClause.createdAt = { [Op.gte]: sevenDaysAgo };
+      } else if (dateRange === "last 30 days") {
+        const thirtyDaysAgo = new Date(now.setDate(now.getDate() - 30));
+        whereClause.createdAt = { [Op.gte]: thirtyDaysAgo };
+      } else if (dateRange === "custom" && startDate) {
+        const start = new Date(startDate);
+        const end = endDate ? new Date(endDate) : new Date();
+        whereClause.createdAt = { [Op.between]: [start, end] };
+      }
+    }
+
+    // 4. Search and association
+    const userSearchInclude = {
+      model: User,
+      as: "user",
+      attributes: ["id", "name", "email", "userType", "picture"]
+    };
+
+    if (search && search.trim() !== "") {
+      const searchPattern = `%${search.trim()}%`;
+      
+      whereClause[Op.or] = [
+        { message: { [Op.like]: searchPattern } },
+        { type: { [Op.like]: searchPattern } },
+        { '$user.name$': { [Op.like]: searchPattern } },
+        { '$user.email$': { [Op.like]: searchPattern } }
+      ];
+    }
+
+    const order = sort === "oldest" ? [["createdAt", "ASC"]] : [["createdAt", "DESC"]];
+
+    const { count, rows } = await Activity.findAndCountAll({
+      where: whereClause,
+      include: [userSearchInclude],
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: order
+    });
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(count / limit)
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in getActivities:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch activities", error: error.message });
+  }
+};
+
+// --- Get latest 10-20 activities for quick dashboard widget
+exports.getRecentActivities = async (req, res) => {
+  try {
+    const Activity = require("../models/activity");
+    const activities = await Activity.findAll({
+      limit: 20,
+      order: [["createdAt", "DESC"]],
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "name", "email", "userType", "picture"]
+        }
+      ]
+    });
+    return res.json({
+      success: true,
+      data: activities
+    });
+  } catch (error) {
+    console.error("Error in getRecentActivities:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch recent activities", error: error.message });
+  }
+};
+

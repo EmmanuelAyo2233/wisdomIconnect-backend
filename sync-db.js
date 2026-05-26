@@ -50,7 +50,23 @@ const migrate = async () => {
     "ALTER TABLE mentor_commendation ADD COLUMN status VARCHAR(20) DEFAULT 'pending';"
   ];
 
-  const allQueries = [...appointmentQueries, ...mentorSettingsQueries, ...menteeSettingsQueries, ...userQueries, ...securityQueries];
+  // Activity logging table
+  const activityQueries = [
+    "CREATE TABLE IF NOT EXISTS activities (" +
+    "  id INT AUTO_INCREMENT PRIMARY KEY," +
+    "  type ENUM('BOOKING', 'PAYMENT', 'SESSION', 'USER', 'SYSTEM') NOT NULL," +
+    "  message TEXT NOT NULL," +
+    "  userId INT NULL," +
+    "  targetId VARCHAR(255) NULL," +
+    "  metadata JSON NULL," +
+    "  status ENUM('success', 'pending', 'failed') DEFAULT 'success' NOT NULL," +
+    "  createdAt DATETIME NOT NULL," +
+    "  updatedAt DATETIME NOT NULL," +
+    "  FOREIGN KEY (userId) REFERENCES user(id) ON DELETE SET NULL ON UPDATE CASCADE" +
+    ");"
+  ];
+
+  const allQueries = [...appointmentQueries, ...mentorSettingsQueries, ...menteeSettingsQueries, ...userQueries, ...securityQueries, ...activityQueries];
 
   for (const query of allQueries) {
      try {
