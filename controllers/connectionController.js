@@ -112,6 +112,9 @@ exports.getConnections = async (req, res) => {
   try {
     const userId = req.user.id;
     const userType = req.user.userType || req.user.role;
+    if (userType === 'admin') {
+        return res.status(200).json({ status: "success", data: [] });
+    }
     const { ChatMessage } = require("../models");
 
     let connections = [];
