@@ -311,6 +311,14 @@ exports.cancelAppointment = async (req, res) => {
         const paystackService = require('../services/paystackService');
         console.log(`[AUTO-REFUND CANCEL] Paid session cancelled by ${userType}. Triggering Paystack refund for ref: ${payment.reference}`);
         const refundRes = await paystackService.processRefund(payment.reference);
+        const { RefundRequest } = require("../models");
+        
+        let menteeUserId = userId;
+        if (userType === 'mentor') {
+          const menteeRec = await Mentee.findByPk(appointment.menteeId);
+          menteeUserId = menteeRec.user_id;
+        }
+
         if (refundRes.success) {
           payment.status = 'refunded';
           payment.escrow_status = 'refunded';
@@ -323,6 +331,17 @@ exports.cancelAppointment = async (req, res) => {
           await appointment.save();
           refundProcessed = true;
           refundRef = refundRes.data.reference;
+
+          await RefundRequest.create({
+              userId: menteeUserId,
+              paymentId: payment.id,
+              appointmentId: appointment.id,
+              mentorId: appointment.mentorId,
+              reasonType: 'cancelled',
+              reason: `Auto-refund: Session cancelled by ${userType}`,
+              status: 'approved',
+              adminNote: `Auto-refunded successfully. Paystack Ref: ${refundRes.data.reference}`
+          });
         } else {
           payment.status = 'refunded';
           payment.escrow_status = 'refunded';
@@ -331,6 +350,17 @@ exports.cancelAppointment = async (req, res) => {
           
           appointment.refund_status = 'failed';
           await appointment.save();
+
+          await RefundRequest.create({
+              userId: menteeUserId,
+              paymentId: payment.id,
+              appointmentId: appointment.id,
+              mentorId: appointment.mentorId,
+              reasonType: 'cancelled',
+              reason: `Auto-refund failed: Session cancelled by ${userType}`,
+              status: 'pending',
+              adminNote: `Auto-refund on cancellation failed: ${refundRes.message}`
+          });
         }
       } else {
         payment.status = 'refunded';
@@ -674,6 +704,10 @@ exports.rejectAppointment = async (req, res) => {
     appointment.status = "rejected";
     await appointment.save();
 
+    const menteeRec = await Mentee.findByPk(appointment.menteeId);
+    const menteeUser = await User.findByPk(menteeRec.user_id);
+    const mentorUserObj = await User.findByPk(mentor.user_id);
+
     // Handle refund logic
     const Payment = require("../models").Payment;
     const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
@@ -682,6 +716,7 @@ exports.rejectAppointment = async (req, res) => {
             const paystackService = require('../services/paystackService');
             console.log(`[AUTO-REFUND DECLINE] Paid booking rejected. Triggering Paystack refund for reference: ${payment.reference}`);
             const refundRes = await paystackService.processRefund(payment.reference);
+            const { RefundRequest } = require("../models");
             if (refundRes.success) {
                 payment.status = 'refunded';
                 payment.escrow_status = 'refunded';
@@ -689,16 +724,40 @@ exports.rejectAppointment = async (req, res) => {
                 payment.refundedAt = new Date();
                 payment.refundReason = "Mentor declined booking";
                 await payment.save();
+                
                 appointment.refund_status = 'refunded';
                 appointment.completion_status = 'cancelled';
                 await appointment.save();
+
+                await RefundRequest.create({
+                    userId: menteeRec.user_id,
+                    paymentId: payment.id,
+                    appointmentId: appointment.id,
+                    mentorId: appointment.mentorId,
+                    reasonType: 'cancelled',
+                    reason: "Auto-refund: Mentor declined the booking request",
+                    status: 'approved',
+                    adminNote: `Auto-refunded successfully. Paystack Ref: ${refundRes.data.reference}`
+                });
             } else {
                 payment.status = 'refunded';
                 payment.escrow_status = 'refunded';
                 payment.refundReason = `Paystack refund failed: ${refundRes.message}`;
                 await payment.save();
+                
                 appointment.refund_status = 'failed';
                 await appointment.save();
+
+                await RefundRequest.create({
+                    userId: menteeRec.user_id,
+                    paymentId: payment.id,
+                    appointmentId: appointment.id,
+                    mentorId: appointment.mentorId,
+                    reasonType: 'cancelled',
+                    reason: "Auto-refund failed: Mentor declined the booking request",
+                    status: 'pending',
+                    adminNote: `Auto-refund initiation failed: ${refundRes.message}`
+                });
             }
         } else {
             payment.status = "refunded";
@@ -706,10 +765,6 @@ exports.rejectAppointment = async (req, res) => {
             await payment.save();
         }
     }
-
-    const menteeRec = await Mentee.findByPk(appointment.menteeId);
-    const menteeUser = await User.findByPk(menteeRec.user_id);
-    const mentorUserObj = await User.findByPk(mentor.user_id);
 
     notificationService.sendNotification({
       receiverId: appointment.menteeId,
