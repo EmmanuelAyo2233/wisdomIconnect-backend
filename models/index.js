@@ -165,6 +165,12 @@ RefundRequest.belongsTo(User, { foreignKey: "userId", as: "user" });
 Payment.hasOne(RefundRequest, { foreignKey: "paymentId", as: "refundRequest" });
 RefundRequest.belongsTo(Payment, { foreignKey: "paymentId", as: "payment" });
 
+Appointment.hasMany(RefundRequest, { foreignKey: "appointmentId", as: "refundRequests" });
+RefundRequest.belongsTo(Appointment, { foreignKey: "appointmentId", as: "appointment" });
+
+Mentor.hasMany(RefundRequest, { foreignKey: "mentorId", as: "refundRequests" });
+RefundRequest.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
+
 User.hasMany(Announcement, { foreignKey: "adminId", as: "announcements" });
 Announcement.belongsTo(User, { foreignKey: "adminId", as: "admin" });
 

@@ -30,7 +30,7 @@ router.get("/mentee", authentication, restrictTo("mentee"), getMenteeAppointment
 // router.put("/:id/reschedule", authentication, restrictTo("mentee"), rescheduleAppointment);
 
 // Cancel appointment
-router.put("/:id/cancel", authentication, restrictTo("mentee"), cancelAppointment);
+router.put("/:id/cancel", authentication, restrictTo("mentee", "mentor"), cancelAppointment);
 
 // Delete appointment
 router.delete("/:id", authentication, restrictTo("mentee"), deleteAppointment);

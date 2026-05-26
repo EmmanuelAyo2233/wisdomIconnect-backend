@@ -267,20 +267,21 @@ exports.cancelAppointment = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.id;
+    const userType = req.user.userType || req.user.role;
 
-    // Find mentee record linked to this user
-    const mentee = await Mentee.findOne({ where: { user_id: userId } });
-    if (!mentee) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Mentee not found ❌",
-      });
+    let appointment;
+    let mentee = null;
+    let mentor = null;
+
+    if (userType === "mentor") {
+      mentor = await Mentor.findOne({ where: { user_id: userId } });
+      if (!mentor) return res.status(404).json({ status: "fail", message: "Mentor record not found ❌" });
+      appointment = await Appointment.findOne({ where: { id, mentorId: mentor.id } });
+    } else {
+      mentee = await Mentee.findOne({ where: { user_id: userId } });
+      if (!mentee) return res.status(404).json({ status: "fail", message: "Mentee record not found ❌" });
+      appointment = await Appointment.findOne({ where: { id, menteeId: mentee.id } });
     }
-
-    // Find the appointment that belongs to this mentee
-    const appointment = await Appointment.findOne({
-      where: { id, menteeId: mentee.id },
-    });
 
     if (!appointment) {
       return res.status(404).json({
@@ -289,27 +290,104 @@ exports.cancelAppointment = async (req, res) => {
       });
     }
 
-    await appointment.update({ status: "cancelled" });
+    if (appointment.status === 'completed' || appointment.status === 'cancelled') {
+      return res.status(400).json({ status: "fail", message: `Cannot cancel a session that is already ${appointment.status}.` });
+    }
 
-    // Notify mentor
-    const mentorUserObj = await User.findByPk(appointment.mentorId, { include: [{ model: Mentor, as: "mentor" }] }); // Note: mentorId is the Mentor PK. Wait, mentorId is ID in Mentor table.
-    const mentorRec = await Mentor.findByPk(appointment.mentorId);
-    if (mentorRec) {
+    await appointment.update({ 
+      status: "cancelled", 
+      completion_status: "cancelled" 
+    });
+
+    // Handle payment auto-refund if session is paid
+    const Payment = require("../models").Payment;
+    const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
+    
+    let refundProcessed = false;
+    let refundRef = null;
+
+    if (payment) {
+      if (appointment.sessionType === 'paid') {
+        const paystackService = require('../services/paystackService');
+        console.log(`[AUTO-REFUND CANCEL] Paid session cancelled by ${userType}. Triggering Paystack refund for ref: ${payment.reference}`);
+        const refundRes = await paystackService.processRefund(payment.reference);
+        if (refundRes.success) {
+          payment.status = 'refunded';
+          payment.escrow_status = 'refunded';
+          payment.refund_reference = refundRes.data.reference;
+          payment.refundedAt = new Date();
+          payment.refundReason = `Session cancelled by ${userType}`;
+          await payment.save();
+          
+          appointment.refund_status = 'refunded';
+          await appointment.save();
+          refundProcessed = true;
+          refundRef = refundRes.data.reference;
+        } else {
+          payment.status = 'refunded';
+          payment.escrow_status = 'refunded';
+          payment.refundReason = `Paystack refund failed on cancellation: ${refundRes.message}`;
+          await payment.save();
+          
+          appointment.refund_status = 'failed';
+          await appointment.save();
+        }
+      } else {
+        payment.status = 'refunded';
+        payment.escrow_status = 'refunded';
+        await payment.save();
+      }
+    }
+
+    // If mentor cancelled, apply strike
+    if (userType === 'mentor' && mentor) {
+      mentor.strikes = (mentor.strikes || 0) + 1;
+      if (mentor.strikes >= 3) {
+        mentor.showInExplore = false;
+      }
+      await mentor.save();
+      console.log(`[STRIKE SYSTEM] Mentor ${mentor.id} strikes updated to: ${mentor.strikes}`);
+    }
+
+    // Notify users
+    if (userType === 'mentor') {
+      const menteeRec = await Mentee.findByPk(appointment.menteeId);
+      if (menteeRec) {
+        const menteeUser = await User.findByPk(menteeRec.user_id);
+        const mentorUser = await User.findByPk(mentor.user_id);
+        if (menteeUser && mentorUser) {
+          notificationService.sendNotification({
+            receiverId: menteeRec.id,
+            receiverType: "mentee",
+            type: "booking",
+            title: "Session Cancelled by Mentor",
+            message: `❌ ${mentorUser.name} cancelled the upcoming session on ${appointment.date}. ${refundProcessed ? 'A full refund has been credited back to your account.' : ''}`,
+            emailData: {
+              to: menteeUser.email,
+              html: require("../utils/emailTemplates").bookingCancelled(menteeUser.name, mentorUser.name, "Mentor initiated cancellation")
+            }
+          }).catch(console.error);
+        }
+      }
+    } else {
+      const mentorRec = await Mentor.findByPk(appointment.mentorId);
+      if (mentorRec) {
         const mentorUser = await User.findByPk(mentorRec.user_id);
         const menteeUser = await User.findByPk(mentee.user_id);
         if (mentorUser && menteeUser) {
-           notificationService.sendNotification({
-              receiverId: mentorRec.id,
-              receiverType: "mentor",
-              type: "booking",
-              title: "Booking Cancelled",
-              message: `❌ ${menteeUser.name} has cancelled the upcoming session on ${appointment.date}.`,
-              emailData: {
-                 to: mentorUser.email,
-                 html: require("../utils/emailTemplates").bookingCancelled(mentorUser.name, menteeUser.name, "Mentee initiated cancellation")
-              }
-           }).catch(console.error);
+          notificationService.sendNotification({
+            receiverId: mentorRec.id,
+            receiverType: "mentor",
+            type: "booking",
+            title: "Booking Cancelled",
+            message: `❌ ${menteeUser.name} has cancelled the upcoming session on ${appointment.date}.`,
+            emailData: {
+              to: mentorUser.email,
+              html: require("../utils/emailTemplates").bookingCancelled(mentorUser.name, menteeUser.name, "Mentee initiated cancellation")
+            }
+          }).catch(console.error);
         }
+      }
     }
 
     logActivity({
@@ -320,9 +398,9 @@ exports.cancelAppointment = async (req, res) => {
       status: "success",
       metadata: {
         appointmentId: appointment.id,
-        mentorId: appointment.mentorId,
-        date: appointment.date,
-        startTime: appointment.startTime
+        cancelledBy: userType,
+        refundProcessed,
+        refundReference: refundRef
       }
     });
 
@@ -599,9 +677,34 @@ exports.rejectAppointment = async (req, res) => {
     // Handle refund logic
     const Payment = require("../models").Payment;
     const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
-    if (payment && payment.status === "awaiting_acceptance") {
-       payment.status = "refunded";
-       await payment.save();
+    if (payment) {
+        if (appointment.sessionType === 'paid') {
+            const paystackService = require('../services/paystackService');
+            console.log(`[AUTO-REFUND DECLINE] Paid booking rejected. Triggering Paystack refund for reference: ${payment.reference}`);
+            const refundRes = await paystackService.processRefund(payment.reference);
+            if (refundRes.success) {
+                payment.status = 'refunded';
+                payment.escrow_status = 'refunded';
+                payment.refund_reference = refundRes.data.reference;
+                payment.refundedAt = new Date();
+                payment.refundReason = "Mentor declined booking";
+                await payment.save();
+                appointment.refund_status = 'refunded';
+                appointment.completion_status = 'cancelled';
+                await appointment.save();
+            } else {
+                payment.status = 'refunded';
+                payment.escrow_status = 'refunded';
+                payment.refundReason = `Paystack refund failed: ${refundRes.message}`;
+                await payment.save();
+                appointment.refund_status = 'failed';
+                await appointment.save();
+            }
+        } else {
+            payment.status = "refunded";
+            payment.escrow_status = "refunded";
+            await payment.save();
+        }
     }
 
     const menteeRec = await Mentee.findByPk(appointment.menteeId);

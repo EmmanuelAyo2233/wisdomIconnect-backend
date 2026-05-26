@@ -132,6 +132,11 @@ const Mentor = sequelize.define(
             allowNull: true,
             field: 'privacy_settings',
         },
+        strikes: {
+            type: DataTypes.INTEGER,
+            defaultValue: 0,
+            field: 'strikes',
+        },
     },
     {
         freezeTableName: true,

@@ -155,6 +155,26 @@ const Appointment = sequelize.define(
       allowNull: true,
       field: "disputeReason",
     },
+    refund_status: {
+      type: DataTypes.ENUM("none", "pending", "refunded", "failed"),
+      defaultValue: "none",
+      field: "refund_status",
+    },
+    completion_status: {
+      type: DataTypes.ENUM("pending", "completed", "disputed", "cancelled"),
+      defaultValue: "pending",
+      field: "completion_status",
+    },
+    mentor_reason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "mentor_reason",
+    },
+    mentee_reason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "mentee_reason",
+    },
     createdAt: {
       type: DataTypes.DATEONLY,
       allowNull: true,

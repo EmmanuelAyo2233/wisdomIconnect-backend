@@ -19,7 +19,8 @@ const migrate = async () => {
     "ALTER TABLE mentor ADD COLUMN show_in_explore BOOLEAN DEFAULT true;",
     "ALTER TABLE mentor ADD COLUMN show_pricing BOOLEAN DEFAULT true;",
     "ALTER TABLE mentor ADD COLUMN notif_prefs JSON DEFAULT NULL;",
-    "ALTER TABLE mentor ADD COLUMN privacy_settings JSON DEFAULT NULL;"
+    "ALTER TABLE mentor ADD COLUMN privacy_settings JSON DEFAULT NULL;",
+    "ALTER TABLE mentor ADD COLUMN strikes INT DEFAULT 0;"
   ];
 
   // Mentee settings columns
@@ -66,7 +67,33 @@ const migrate = async () => {
     ");"
   ];
 
-  const allQueries = [...appointmentQueries, ...mentorSettingsQueries, ...menteeSettingsQueries, ...userQueries, ...securityQueries, ...activityQueries];
+  // Refund and Escrow queries
+  const refundEscrowQueries = [
+    "ALTER TABLE payment ADD COLUMN escrow_status ENUM('held', 'released', 'refunded', 'disputed') DEFAULT 'held';",
+    "ALTER TABLE payment ADD COLUMN refund_reference VARCHAR(255) DEFAULT NULL;",
+    "ALTER TABLE payment ADD COLUMN refundedAt DATETIME DEFAULT NULL;",
+    "ALTER TABLE payment ADD COLUMN refundReason VARCHAR(255) DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN refund_status ENUM('none', 'pending', 'refunded', 'failed') DEFAULT 'none';",
+    "ALTER TABLE appointment ADD COLUMN completion_status ENUM('pending', 'completed', 'disputed', 'cancelled') DEFAULT 'pending';",
+    "ALTER TABLE appointment ADD COLUMN mentor_reason TEXT DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN mentee_reason TEXT DEFAULT NULL;",
+    "ALTER TABLE refund_request ADD COLUMN appointmentId INT DEFAULT NULL;",
+    "ALTER TABLE refund_request ADD COLUMN mentorId INT DEFAULT NULL;",
+    "ALTER TABLE refund_request ADD COLUMN reasonType ENUM('no_show', 'technical', 'cancelled', 'misconduct', 'duration', 'other') DEFAULT 'other';",
+    "ALTER TABLE refund_request ADD COLUMN evidenceUrl VARCHAR(500) DEFAULT NULL;",
+    "ALTER TABLE refund_request ADD CONSTRAINT fk_refund_appointment FOREIGN KEY (appointmentId) REFERENCES appointment(id) ON DELETE SET NULL;",
+    "ALTER TABLE refund_request ADD CONSTRAINT fk_refund_mentor FOREIGN KEY (mentorId) REFERENCES mentor(id) ON DELETE SET NULL;"
+  ];
+
+  const allQueries = [
+    ...appointmentQueries, 
+    ...mentorSettingsQueries, 
+    ...menteeSettingsQueries, 
+    ...userQueries, 
+    ...securityQueries, 
+    ...activityQueries,
+    ...refundEscrowQueries
+  ];
 
   for (const query of allQueries) {
      try {

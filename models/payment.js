@@ -33,6 +33,26 @@ const Payment = sequelize.define(
             type: DataTypes.ENUM("awaiting_acceptance", "pending", "completed", "released", "refunded", "disputed"),
             defaultValue: "awaiting_acceptance",
         },
+        escrow_status: {
+            type: DataTypes.ENUM("held", "released", "refunded", "disputed"),
+            defaultValue: "held",
+            field: "escrow_status"
+        },
+        refund_reference: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            field: "refund_reference"
+        },
+        refundedAt: {
+            type: DataTypes.DATE,
+            allowNull: true,
+            field: "refundedAt"
+        },
+        refundReason: {
+            type: DataTypes.STRING,
+            allowNull: true,
+            field: "refundReason"
+        },
         appointmentId: {
             type: DataTypes.INTEGER,
             allowNull: false,
