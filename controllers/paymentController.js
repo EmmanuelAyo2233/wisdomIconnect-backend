@@ -181,6 +181,7 @@ exports.requestRefund = async (req, res) => {
             if (payment) {
                 payment.status = 'disputed';
                 await payment.save();
+            }
             logActivity({
                 type: "PAYMENT",
                 message: `Refund dispute opened for Session (Appointment ID ${appointment.id})`,
