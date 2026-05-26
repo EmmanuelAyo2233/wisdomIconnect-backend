@@ -105,6 +105,56 @@ const Appointment = sequelize.define(
       defaultValue: 0,
       field: "duration",
     },
+    sessionType: {
+      type: DataTypes.STRING,
+      defaultValue: "free",
+      field: "sessionType",
+    },
+    mentorJoinTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "mentorJoinTime",
+    },
+    menteeJoinTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "menteeJoinTime",
+    },
+    actualStartTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "actualStartTime",
+    },
+    actualEndTime: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "actualEndTime",
+    },
+    endedBy: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "endedBy",
+    },
+    endReason: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "endReason",
+    },
+    completionMethod: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      field: "completionMethod",
+    },
+    disputedBy: {
+      type: DataTypes.STRING,
+      defaultValue: "none",
+      field: "disputedBy",
+    },
+    disputeReason: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      field: "disputeReason",
+    },
     createdAt: {
       type: DataTypes.DATEONLY,
       allowNull: true,

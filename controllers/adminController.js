@@ -411,7 +411,7 @@ exports.deleteMentee = async (req, res) => {
 
 // --- Advanced User Actions ---
 
-const { AdminLog, Payment, Appointment, Report } = require('../models');
+const { AdminLog, Payment, Appointment, Report, Review, MentorCommendation } = require('../models');
 
 exports.suspendUser = async (req, res) => {
   try {
@@ -517,5 +517,193 @@ exports.getUserActivity = async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
+  }
+};
+
+exports.getReviewsForAdmin = async (req, res) => {
+  try {
+    const reviews = await Review.findAll({
+      include: [
+        {
+          model: Appointment,
+          as: "appointment",
+          attributes: ["date", "startTime", "endTime", "sessionType"]
+        },
+        {
+          model: Mentor,
+          as: "mentor",
+          include: [{ model: User, as: "user", attributes: ["name", "picture"] }]
+        },
+        {
+          model: Mentee,
+          as: "mentee",
+          include: [{ model: User, as: "user", attributes: ["name", "picture"] }]
+        }
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+    res.json({ reviews });
+  } catch (error) {
+    console.error("Error fetching admin reviews:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.getCommendationsForAdmin = async (req, res) => {
+  try {
+    const commendations = await MentorCommendation.findAll({
+      include: [
+        {
+          model: Appointment,
+          as: "appointment",
+          attributes: ["date", "startTime", "endTime", "sessionType"]
+        },
+        {
+          model: Mentor,
+          as: "mentor",
+          include: [{ model: User, as: "user", attributes: ["name", "picture"] }]
+        },
+        {
+          model: Mentee,
+          as: "mentee",
+          include: [{ model: User, as: "user", attributes: ["name", "picture"] }]
+        }
+      ],
+      order: [["createdAt", "DESC"]]
+    });
+    res.json({ commendations });
+  } catch (error) {
+    console.error("Error fetching admin commendations:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.getDisputedSessions = async (req, res) => {
+  try {
+    const disputes = await Appointment.findAll({
+      where: { status: "under_review" },
+      include: [
+        {
+          model: Mentor,
+          as: "mentor",
+          include: [{ model: User, as: "user", attributes: ["id", "name", "picture", "email"] }]
+        },
+        {
+          model: Mentee,
+          as: "mentee",
+          include: [{ model: User, as: "user", attributes: ["id", "name", "picture", "email"] }]
+        },
+        {
+          model: Payment,
+          as: "payment"
+        }
+      ],
+      order: [["updatedAt", "DESC"]]
+    });
+    res.json({ disputes });
+  } catch (error) {
+    console.error("Error fetching disputes:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+exports.resolveDispute = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { appointmentId } = req.params;
+    const { resolution } = req.body; // 'release_payout' or 'refund_mentee'
+
+    const appointment = await Appointment.findByPk(appointmentId);
+    if (!appointment) return res.status(404).json({ message: "Appointment not found" });
+    if (appointment.status !== "under_review") {
+        return res.status(400).json({ message: "Appointment is not currently under review" });
+    }
+
+    const payment = await Payment.findOne({ where: { appointmentId } });
+
+    if (resolution === "release_payout") {
+        const Wallet = require("../models/wallet");
+        const mentor = await Mentor.findByPk(appointment.mentorId);
+        
+        appointment.status = "completed";
+        appointment.completionMethod = "admin_release";
+        await appointment.save();
+
+        if (payment && payment.status === "disputed") {
+            payment.status = "released";
+            await payment.save();
+
+            if (mentor) {
+                const mentorWallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
+                if (mentorWallet) {
+                    mentorWallet.pendingBalance -= payment.mentorShare;
+                    mentorWallet.availableBalance += payment.mentorShare;
+                    mentorWallet.totalEarned += payment.mentorShare;
+                    await mentorWallet.save();
+                }
+            }
+
+            const admin = await User.findOne({ where: { userType: 'admin' } });
+            if (admin) {
+                 const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
+                 if (adminWallet) {
+                      adminWallet.pendingBalance -= payment.platformShare;
+                      adminWallet.availableBalance += payment.platformShare;
+                      adminWallet.totalEarned += payment.platformShare;
+                      await adminWallet.save();
+                 }
+            }
+        }
+
+        await AdminLog.create({
+            adminId,
+            action: "RESOLVE_DISPUTE_RELEASE",
+            targetId: appointmentId.toString(),
+            details: "Released payout of " + (payment ? payment.amount : 0) + " to mentor."
+        });
+
+        return res.json({ message: "Dispute resolved successfully. Payout released to mentor ✅", appointment });
+    } else if (resolution === "refund_mentee") {
+        appointment.status = "cancelled";
+        appointment.completionMethod = "admin_refund";
+        await appointment.save();
+
+        if (payment && payment.status === "disputed") {
+            payment.status = "refunded";
+            await payment.save();
+
+            const mentor = await Mentor.findByPk(appointment.mentorId);
+            if (mentor) {
+                const mentorWallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
+                if (mentorWallet) {
+                    mentorWallet.pendingBalance = Math.max(0, mentorWallet.pendingBalance - payment.mentorShare);
+                    await mentorWallet.save();
+                }
+            }
+
+            const admin = await User.findOne({ where: { userType: 'admin' } });
+            if (admin) {
+                 const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
+                 if (adminWallet) {
+                      adminWallet.pendingBalance = Math.max(0, adminWallet.pendingBalance - payment.platformShare);
+                      await adminWallet.save();
+                 }
+            }
+        }
+
+        await AdminLog.create({
+            adminId,
+            action: "RESOLVE_DISPUTE_REFUND",
+            targetId: appointmentId.toString(),
+            details: "Refunded mentee for payment of " + (payment ? payment.amount : 0)
+        });
+
+        return res.json({ message: "Dispute resolved successfully. Mentee refunded ✅", appointment });
+    } else {
+        return res.status(400).json({ message: "Invalid resolution option. Must be 'release_payout' or 'refund_mentee'" });
+    }
+  } catch (error) {
+    console.error("Error resolving dispute:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
   }
 };

@@ -25,6 +25,11 @@ const MentorCommendation = sequelize.define(
                 max: 5
             }
         },
+        status: {
+            type: DataTypes.STRING,
+            defaultValue: "pending",
+            field: "status"
+        },
         appointmentId: {
             type: DataTypes.INTEGER,
             allowNull: false,

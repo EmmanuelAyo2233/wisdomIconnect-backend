@@ -28,4 +28,10 @@ router.post("/ban-user/:id", adminController.banUser);
 router.post("/warn-user/:id", adminController.warnUser);
 router.get("/user-activity/:id", adminController.getUserActivity);
 
+// Disputes, Reviews & Commendations audit panel routes
+router.get("/reviews", adminController.getReviewsForAdmin);
+router.get("/commendations", adminController.getCommendationsForAdmin);
+router.get("/disputes", adminController.getDisputedSessions);
+router.put("/disputes/:appointmentId/resolve", adminController.resolveDispute);
+
 module.exports = router;

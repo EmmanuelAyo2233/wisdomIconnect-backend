@@ -34,7 +34,23 @@ const migrate = async () => {
     "ALTER TABLE user ADD COLUMN verificationToken VARCHAR(255) DEFAULT NULL;"
   ];
 
-  const allQueries = [...appointmentQueries, ...mentorSettingsQueries, ...menteeSettingsQueries, ...userQueries];
+  // Security, Escrow and Moderation columns
+  const securityQueries = [
+    "ALTER TABLE appointment ADD COLUMN sessionType VARCHAR(20) DEFAULT 'free';",
+    "ALTER TABLE appointment ADD COLUMN mentorJoinTime DATETIME DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN menteeJoinTime DATETIME DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN actualStartTime DATETIME DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN actualEndTime DATETIME DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN endedBy VARCHAR(20) DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN endReason VARCHAR(255) DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN completionMethod VARCHAR(30) DEFAULT NULL;",
+    "ALTER TABLE appointment ADD COLUMN disputedBy VARCHAR(20) DEFAULT 'none';",
+    "ALTER TABLE appointment ADD COLUMN disputeReason TEXT DEFAULT NULL;",
+    "ALTER TABLE review ADD COLUMN status VARCHAR(20) DEFAULT 'pending';",
+    "ALTER TABLE mentor_commendation ADD COLUMN status VARCHAR(20) DEFAULT 'pending';"
+  ];
+
+  const allQueries = [...appointmentQueries, ...mentorSettingsQueries, ...menteeSettingsQueries, ...userQueries, ...securityQueries];
 
   for (const query of allQueries) {
      try {

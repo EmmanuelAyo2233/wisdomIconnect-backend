@@ -127,7 +127,8 @@ exports.bookAppointment = async (req, res) => {
       goals,
       status: mentor.autoAccept ? "accepted" : "pending",
       meetingId: meetingId,
-      meetingLink: meetingId ? `/call/${meetingId}` : null
+      meetingLink: meetingId ? `/call/${meetingId}` : null,
+      sessionType: sessionAmount > 0 ? "paid" : "free"
     });
 
     // ✅ Mark slot as booked

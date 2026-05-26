@@ -159,7 +159,7 @@ const getMentorsDetails = async (req, res) => {
 
     // Fetch Reviews
     const reviews = await Review.findAll({
-      where: { mentorId: mentor.id },
+      where: { mentorId: mentor.id, status: "approved" },
       include: [
         {
           model: Mentee,

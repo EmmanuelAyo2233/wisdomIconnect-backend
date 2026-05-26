@@ -25,6 +25,11 @@ const Review = sequelize.define(
             type: DataTypes.TEXT,
             allowNull: true,
         },
+        status: {
+            type: DataTypes.STRING,
+            defaultValue: "pending",
+            field: "status"
+        },
         appointmentId: {
             type: DataTypes.INTEGER,
             allowNull: false,

@@ -54,7 +54,7 @@ const getdetails = async (req, res) => {
        };
 
        reviews = await Review.findAll({
-          where: { mentorId: user.mentor.id },
+          where: { mentorId: user.mentor.id, status: "approved" },
           include: [{ model: Mentee, as: "mentee", include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }] }],
           order: [["createdAt", "DESC"]]
        });
