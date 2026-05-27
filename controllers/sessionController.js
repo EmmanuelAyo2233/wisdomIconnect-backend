@@ -304,7 +304,7 @@ exports.endSession = async (req, res) => {
         const { appointmentId } = req.params;
         const userId = req.user.id;
         const role = req.user.userType;
-        const { endReason } = req.body;
+        const { endReason, clientElapsedMinutes } = req.body;
 
         const appointment = await Appointment.findByPk(appointmentId);
         if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
@@ -344,7 +344,10 @@ exports.endSession = async (req, res) => {
             }
         }
 
-        // Compute actual duration
+        // Compute actual duration using server timestamps first,
+        // then fall back to the client-measured elapsed time if server start is missing.
+        // This prevents a false dispute when actualStartTime was never written to the DB
+        // (e.g., the /join endpoint wasn't called before both peers connected via WebRTC).
         let actualMinutes = 0;
         if (appointment.actualStartTime) {
             const diffMs = appointment.actualEndTime - appointment.actualStartTime;
@@ -352,6 +355,10 @@ exports.endSession = async (req, res) => {
         } else if (appointment.callStartedAt) {
             const diffMs = appointment.actualEndTime - appointment.callStartedAt;
             actualMinutes = Math.max(1, Math.round(diffMs / 60000));
+        } else if (clientElapsedMinutes && typeof clientElapsedMinutes === 'number' && clientElapsedMinutes > 0) {
+            // Client-side fallback: trusted elapsed time measured in the browser
+            console.log(`[endSession] Using client elapsed time fallback: ${clientElapsedMinutes}m (no server actualStartTime)`);
+            actualMinutes = Math.round(clientElapsedMinutes);
         }
         appointment.duration = actualMinutes;
 

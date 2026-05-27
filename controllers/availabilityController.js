@@ -24,6 +24,21 @@ exports.createAvailability = async (req, res) => {
     const user = await User.findByPk(mentorId, { include: [{ model: Mentor, as: "mentor" }] });
     if (!user) return res.status(404).json({ message: "Mentor not found ❌" });
 
+    // 🛡️ KYC Guard — only for paid slots
+    const slotPrice = price !== null && price !== undefined ? Number(price) : Number(user.mentor?.sessionPrice || 0);
+    if (slotPrice > 0 && user.mentor?.kyc_status !== "verified") {
+      const kycStatusMsg = {
+        not_verified: "You must complete KYC verification before creating paid sessions. Go to your profile → KYC Verification to submit your documents.",
+        pending: "Your KYC verification is currently under review. You can create paid sessions once it is approved.",
+        rejected: `Your KYC was rejected: "${user.mentor?.kyc_rejection_reason || 'See admin note'}". Please re-submit your documents to unlock paid sessions.`,
+      };
+      return res.status(403).json({
+        status: "fail",
+        message: kycStatusMsg[user.mentor?.kyc_status] || "KYC verification required for paid sessions ❌",
+        kyc_status: user.mentor?.kyc_status || "not_verified",
+      });
+    }
+
     const sessionDuration = parseInt(req.body.custom_duration) || user.mentor?.default_duration || 30;
     const globalPrice = user.mentor?.sessionPrice || 0;
     const mentorLevel = user.mentorLevel || "starter";

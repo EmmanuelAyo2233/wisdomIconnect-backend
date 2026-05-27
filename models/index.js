@@ -35,6 +35,7 @@ const Announcement = require("./announcement");
 const PlatformSetting = require("./platformSetting");
 const AdminLog = require("./adminLog");
 const Activity = require("./activity");
+const MentorKyc = require("./mentorKyc");
 
 const sequelize = require("../config/db");
 
@@ -180,6 +181,10 @@ AdminLog.belongsTo(User, { foreignKey: "adminId", as: "admin" });
 User.hasMany(Activity, { foreignKey: "userId", as: "activities" });
 Activity.belongsTo(User, { foreignKey: "userId", as: "user" });
 
+// KYC associations
+Mentor.hasOne(MentorKyc, { foreignKey: "mentor_id", as: "kyc" });
+MentorKyc.belongsTo(Mentor, { foreignKey: "mentor_id", as: "mentor" });
+
 module.exports = {
     db,
     User,
@@ -212,4 +217,5 @@ module.exports = {
     PlatformSetting,
     AdminLog,
     Activity,
+    MentorKyc,
 };

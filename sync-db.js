@@ -85,6 +85,27 @@ const migrate = async () => {
     "ALTER TABLE refund_request ADD CONSTRAINT fk_refund_mentor FOREIGN KEY (mentorId) REFERENCES mentor(id) ON DELETE SET NULL;"
   ];
 
+  // KYC queries
+  const kycQueries = [
+    "ALTER TABLE mentor ADD COLUMN kyc_status ENUM('not_verified','pending','verified','rejected') DEFAULT 'not_verified';",
+    "ALTER TABLE mentor ADD COLUMN kyc_rejection_reason TEXT DEFAULT NULL;",
+    "CREATE TABLE IF NOT EXISTS mentor_kyc (" +
+    "  id INT AUTO_INCREMENT PRIMARY KEY," +
+    "  mentor_id INT NOT NULL," +
+    "  id_type ENUM('national_id','drivers_license','international_passport','voters_card') NOT NULL," +
+    "  id_document_url VARCHAR(500) NOT NULL," +
+    "  selfie_url VARCHAR(500) NOT NULL," +
+    "  phone_number VARCHAR(50) DEFAULT NULL," +
+    "  status ENUM('pending','verified','rejected') DEFAULT 'pending'," +
+    "  admin_note TEXT DEFAULT NULL," +
+    "  reviewed_by INT DEFAULT NULL," +
+    "  reviewed_at DATETIME DEFAULT NULL," +
+    "  createdAt DATETIME NOT NULL," +
+    "  updatedAt DATETIME NOT NULL," +
+    "  FOREIGN KEY (mentor_id) REFERENCES mentor(id) ON DELETE CASCADE" +
+    ");"
+  ];
+
   const allQueries = [
     ...appointmentQueries, 
     ...mentorSettingsQueries, 
@@ -92,7 +113,8 @@ const migrate = async () => {
     ...userQueries, 
     ...securityQueries, 
     ...activityQueries,
-    ...refundEscrowQueries
+    ...refundEscrowQueries,
+    ...kycQueries
   ];
 
   for (const query of allQueries) {

@@ -129,6 +129,10 @@ app.use(`${API_URL}/reports`, reportRoutes);
 const refundRoutes = require("./routes/refundRoutes");
 app.use(`${API_URL}/refunds`, refundRoutes);
 
+const kycRoutes = require("./routes/kycRoutes");
+app.use(`${API_URL}/kyc`, kycRoutes);
+
+
 const announcementRoutes = require("./routes/announcementRoutes");
 app.use(`${API_URL}/announcements`, announcementRoutes);
 

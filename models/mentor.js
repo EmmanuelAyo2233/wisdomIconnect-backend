@@ -137,6 +137,16 @@ const Mentor = sequelize.define(
             defaultValue: 0,
             field: 'strikes',
         },
+        kyc_status: {
+            type: DataTypes.ENUM('not_verified', 'pending', 'verified', 'rejected'),
+            defaultValue: 'not_verified',
+            field: 'kyc_status',
+        },
+        kyc_rejection_reason: {
+            type: DataTypes.TEXT,
+            allowNull: true,
+            field: 'kyc_rejection_reason',
+        },
     },
     {
         freezeTableName: true,
