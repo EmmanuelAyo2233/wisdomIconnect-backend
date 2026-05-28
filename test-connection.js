@@ -1,6 +1,6 @@
 const mysql = require("mysql2");
 
-console.log("Connecting...");
+console.log("Connecting with rejectUnauthorized: true...");
 const connection = mysql.createConnection({
   host: "gateway01.us-west-2.prod.aws.tidbcloud.com",
   port: 4000,
@@ -9,7 +9,7 @@ const connection = mysql.createConnection({
   database: "wisdomconnect_test",
   ssl: {
     minVersion: 'TLSv1.2',
-    rejectUnauthorized: false
+    rejectUnauthorized: true
   },
   connectTimeout: 10000
 });
@@ -19,13 +19,6 @@ connection.connect((err) => {
     console.error("❌ Connection failed:", err.message);
   } else {
     console.log("✅ Successfully connected to the database!");
-    connection.query("SHOW TABLES;", (err, rows) => {
-      if (err) {
-        console.error("❌ Show tables failed:", err.message);
-      } else {
-        console.log("Tables:", rows);
-      }
-      connection.end();
-    });
+    connection.end();
   }
 });

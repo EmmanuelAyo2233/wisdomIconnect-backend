@@ -1,42 +1,23 @@
-// const jwt = require("jsonwebtoken");
-// const { User, Mentor, Mentee } = require("../models");
-// const { Op } = require("sequelize");
-// const { SECRET_KEY } = require("../config/reuseablePackages"); // import properly
+/**
+ * Authentication Middleware - Moved to controllers/authcontrollers.js
+ * 
+ * This file is kept for reference only.
+ * 
+ * ✅ SECURE: Token now stored in HTTP-only cookie, not in Authorization header
+ * 
+ * The authentication middleware in authcontrollers.js:
+ * 1. Reads token from HTTP-only cookie (req.cookies.authToken)
+ * 2. Verifies the JWT
+ * 3. Attaches user to req.user
+ * 
+ * Import from:
+ *   const { authentication, restrictTo } = require("../controllers/authcontrollers");
+ * 
+ * Usage in routes:
+ *   router.get("/protected", authentication, restrictTo("mentor"), handler);
+ */
 
-// const authentication = async (req, res, next) => {
-//   try {
-//     let idToken = "";
-//     if (
-//       req.headers.authorization &&
-//       req.headers.authorization.startsWith("Bearer ")
-//     ) {
-//       idToken = req.headers.authorization.split(" ")[1].trim();
-//     }
+// Authentication is now in authcontrollers.js
+// Search for "const authentication = async" there
 
-//     if (!idToken) {
-//       return res.status(401).json({ status: "fail", message: "please login to get access" });
-//     }
 
-//     const tokenDetails = jwt.verify(idToken, SECRET_KEY);
-
-//     const freshUser = await User.findOne({
-//       where: { [Op.or]: [{ id: tokenDetails.id }, { email: tokenDetails.email }] },
-//       include: [
-//         { model: Mentor, as: "mentor", required: false },
-//         { model: Mentee, as: "mentee", required: false },
-//       ],
-//       attributes: { exclude: ["password"] },
-//     });
-
-//     if (!freshUser) {
-//       return res.status(400).json({ status: "fail", message: "User no longer exist" });
-//     }
-
-//     req.user = freshUser;
-//     next();
-//   } catch (error) {
-//     return res.status(401).json({ status: "fail", message: "Invalid or expired token" });
-//   }
-// };
-
-// module.exports = authentication;
