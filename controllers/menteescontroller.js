@@ -74,6 +74,9 @@ const getMentorsDetails = async (req, res) => {
             "role",
             "linkedinUrl",
             "countryCode",
+            "rating",
+            "mentorLevel",
+            "sessionsCompleted",
           ],
         },
       ],
@@ -92,26 +95,70 @@ const getMentorsDetails = async (req, res) => {
       ],
     });
 
+    // ✅ Fetch reviews (approved only; filter hidden in JS — isHidden col may not exist in DB)
+    const Review = require("../models/review");
+    const allReviews = await Review.findAll({
+      where: { mentorId: mentor.id, status: "approved" },
+      include: [{ model: Mentee, as: "mentee", include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }] }],
+      order: [["createdAt", "DESC"]]
+    });
+    const reviews = allReviews.filter(r => !r.isHidden);
+
+    // ✅ Fetch achievements
+    let achievementsList = [];
+    try {
+      const UserAchievement = require("../models/userAchievement");
+      const Achievement = require("../models/achievement");
+      const userAchievements = await UserAchievement.findAll({
+        where: { user_id: mentor.user_id, role: "mentor" },
+        include: [{ model: Achievement, as: "achievement" }]
+      });
+      achievementsList = userAchievements.map(ua => ({
+        id: ua.id,
+        title: ua.achievement?.title,
+        description: ua.achievement?.description,
+        icon: ua.achievement?.icon,
+        criteria_type: ua.achievement?.criteria_type,
+        earned_at: ua.earned_at
+      }));
+    } catch(e) {}
+
+    const safeParseJSON = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch(e) { return []; }
+    };
+
     const profile = {
       id: mentor.id,
       user_id: mentor.user_id,
-      name: mentor.User?.name || "Unknown",
-      email: mentor.User?.email || "",
-      picture: mentor.User?.picture || "images/default-avatar.png",
-      status: mentor.User?.status || "",
-      userType: mentor.User?.userType || "",
-      role: mentor.User?.role || "",
-      linkedinUrl: mentor.User?.linkedinUrl || "",
-      countryCode: mentor.User?.countryCode || "NG",
+      name: mentor.user?.name || "Unknown",
+      email: mentor.user?.email || "",
+      picture: mentor.user?.picture || "images/default-avatar.png",
+      status: mentor.user?.status || "",
+      userType: mentor.user?.userType || "",
+      occupation: mentor.role || mentor.user?.role || "",
+      role: mentor.role || mentor.user?.role || "",
+      linkedinUrl: mentor.linkedinUrl || mentor.user?.linkedinUrl || "",
+      countryCode: mentor.user?.countryCode || "NG",
+      rating: mentor.user?.rating || 0,
+      mentorLevel: mentor.user?.mentorLevel || "starter",
+      sessionsCompleted: mentor.user?.sessionsCompleted || 0,
       bio: mentor.bio || "",
-      expertise: mentor.expertise ? JSON.parse(mentor.expertise) : [],
-      disciplines: mentor.disciplines ? JSON.parse(mentor.disciplines) : [],
-      education: mentor.education ? JSON.parse(mentor.education) : [],
-      experience: mentor.experience ? JSON.parse(mentor.experience) : [],
+      expertise: safeParseJSON(mentor.expertise),
+      discipline: safeParseJSON(mentor.discipline),
+      disciplines: safeParseJSON(mentor.discipline),
+      industries: safeParseJSON(mentor.industries),
+      fluentIn: safeParseJSON(mentor.fluentIn),
+      education: safeParseJSON(mentor.education),
+      experience: safeParseJSON(mentor.experience),
       experienceDescription: mentor.experienceDescription || "",
       yearsOfExperience: mentor.yearsOfExperience || 0,
+      sessionPrice: mentor.sessionPrice || 0,
       attendance: mentor.attendance || "0%",
       availableSlots,
+      reviews,
+      achievements: achievementsList,
     };
 
     res.status(200).json({ status: "success", data: profile });
@@ -120,6 +167,7 @@ const getMentorsDetails = async (req, res) => {
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
+
 
 const { MentorCommendation } = require("../models");
 
@@ -163,15 +211,16 @@ const getMenteeProfileById = async (req, res) => {
 
     const attendanceRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
 
-    // Mentor Commendations
+    // Mentor Commendations (filter hidden in JS — isHidden col may not exist in DB)
     let commendations = [];
     try {
       if (MentorCommendation) {
-         commendations = await MentorCommendation.findAll({
-            where: { menteeId: mentee.id, isHidden: false }, // ✅ FIXED: Exclude hidden commendations
+         const allComms = await MentorCommendation.findAll({
+            where: { menteeId: mentee.id },
             include: [{ model: Mentor, as: "mentor", include: [{ model: User, as: "user", attributes: ["name", "picture", "id"] }] }],
             order: [["createdAt", "DESC"]]
          });
+         commendations = allComms.filter(c => !c.isHidden);
       }
     } catch(e) {}
 

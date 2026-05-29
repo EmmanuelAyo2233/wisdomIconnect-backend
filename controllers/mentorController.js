@@ -31,7 +31,7 @@ const getAllMentors = async (req, res) => {
     };
 
     const formatted = await Promise.all(mentors.map(async (m) => {
-      const reviewCount = await Review.count({ where: { mentorId: m.id, isHidden: false } }); // ✅ FIXED: Exclude hidden reviews
+      const reviewCount = await Review.count({ where: { mentorId: m.id } }); // count all, isHidden not a DB col yet
       return {
         id: m.id,
         user_id: m.user_id,
@@ -157,9 +157,9 @@ const getMentorsDetails = async (req, res) => {
 
     const attendanceRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
 
-    // Fetch Reviews
-    const reviews = await Review.findAll({
-      where: { mentorId: mentor.id, status: "approved", isHidden: false }, // ✅ FIXED: Exclude hidden reviews
+    // Fetch Reviews — filter hidden in JS (isHidden may not exist in DB yet)
+    const allReviews = await Review.findAll({
+      where: { mentorId: mentor.id, status: "approved" },
       include: [
         {
           model: Mentee,
@@ -169,6 +169,7 @@ const getMentorsDetails = async (req, res) => {
       ],
       order: [["createdAt", "DESC"]]
     });
+    const reviews = allReviews.filter(r => !r.isHidden);
 
     const safeParse = (val) => {
        if (!val) return [];

@@ -504,9 +504,10 @@ exports.submitReview = async (req, res) => {
         }
 
         // Update mentor's average rating (only based on approved reviews to keep data authentic)
-        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId, status: "approved", isHidden: false } }); // ✅ FIXED: Only use visible reviews for rating
-        if (allReviews.length > 0) {
-            const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
+        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId, status: "approved" } });
+        const allReviews2 = allReviews.filter(r => !r.isHidden); // filter hidden in JS (isHidden may not exist in DB)
+        if (allReviews2.length > 0) {
+            const avgRating = allReviews2.reduce((sum, r) => sum + r.rating, 0) / allReviews2.length;
             const roundedRating = Number(avgRating.toFixed(1));
 
             const mentor = await Mentor.findByPk(appointment.mentorId, { include: ["user"] });
