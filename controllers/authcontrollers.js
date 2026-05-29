@@ -378,23 +378,48 @@ const logout = async (req, res) => {
   const authentication = async (req, res, next) => {
     try {
       let idToken = "";
-      
-      // ✅ SECURE: Check HTTP-only cookie first (primary method)
+      let tokenSource = "";
+      let decoded = null;
+      let verifyError = null;
+
+      // 1. Try reading and verifying token from cookies (Primary method)
       if (req.cookies && req.cookies.authToken) {
-        idToken = req.cookies.authToken;
-      }
-      // Fallback: Check Authorization header for backward compatibility
-      else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
-        idToken = req.headers.authorization.split(" ")[1];
+        const cookieToken = req.cookies.authToken.trim();
+        try {
+          decoded = jwt.verify(cookieToken, SECRET_KEY);
+          idToken = cookieToken;
+          tokenSource = "cookie";
+        } catch (err) {
+          verifyError = err;
+          console.warn("⚠️ Cookie verification failed, will try header fallback. Error:", err.message);
+        }
       }
 
-      if (!idToken) {
-        return res.status(401).json({ status: "fail", message: "Please login to get access" });
+      // 2. Fallback: Try reading and verifying token from Authorization header
+      if (!decoded && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+        const headerParts = req.headers.authorization.split(" ");
+        const headerToken = headerParts.length > 1 ? headerParts[1].trim() : "";
+        if (headerToken) {
+          try {
+            decoded = jwt.verify(headerToken, SECRET_KEY);
+            idToken = headerToken;
+            tokenSource = "header";
+            verifyError = null; // Clear previous cookie error if header verification succeeds
+          } catch (err) {
+            verifyError = err;
+            console.error("❌ Header verification failed too. Error:", err.message);
+          }
+        }
       }
 
+      // If we couldn't verify using either method, return 401
+      if (!decoded) {
+        const errMsg = verifyError ? verifyError.message : "Please login to get access";
+        return res.status(401).json({ status: "fail", message: "JWT: " + errMsg });
+      }
 
-      const tokenDetails = jwt.verify(idToken, SECRET_KEY);
-      console.log("AUTH DEBUG tokenDetails:", tokenDetails);
+      const tokenDetails = decoded;
+      console.log(`🔑 AUTH SUCCESS via ${tokenSource}. User ID: ${tokenDetails.id}`);
 
       const freshUser = await User.findOne({
         where: {
