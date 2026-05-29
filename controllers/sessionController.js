@@ -594,3 +594,46 @@ exports.submitCommendation = async (req, res) => {
         res.status(500).json({ status: "error", message: "Server error ❌", error: error.message });
     }
 };
+
+// ✅ Delete a review — only the mentee who wrote it can delete it
+exports.deleteReview = async (req, res) => {
+    try {
+        const { reviewId } = req.params;
+        const userId = req.user.id;
+        const review = await Review.findByPk(reviewId, {
+            include: [{ model: Mentee, as: "mentee", include: [{ model: User, as: "user", attributes: ["id"] }] }]
+        });
+        if (!review) return res.status(404).json({ status: "fail", message: "Review not found" });
+        const authorUserId = review.mentee?.user?.id || review.mentee?.user_id;
+        if (String(authorUserId) !== String(userId)) {
+            return res.status(403).json({ status: "fail", message: "You can only delete your own reviews" });
+        }
+        await review.destroy();
+        res.status(200).json({ status: "success", message: "Review deleted successfully" });
+    } catch (error) {
+        console.error("❌ Delete review error:", error);
+        res.status(500).json({ status: "error", message: "Server error", error: error.message });
+    }
+};
+
+// ✅ Delete a commendation — only the mentor who wrote it can delete it
+exports.deleteCommendation = async (req, res) => {
+    try {
+        const { commendationId } = req.params;
+        const userId = req.user.id;
+        const commendation = await MentorCommendation.findByPk(commendationId, {
+            include: [{ model: Mentor, as: "mentor", include: [{ model: User, as: "user", attributes: ["id"] }] }]
+        });
+        if (!commendation) return res.status(404).json({ status: "fail", message: "Commendation not found" });
+        const authorUserId = commendation.mentor?.user?.id || commendation.mentor?.user_id;
+        if (String(authorUserId) !== String(userId)) {
+            return res.status(403).json({ status: "fail", message: "You can only delete your own commendations" });
+        }
+        await commendation.destroy();
+        res.status(200).json({ status: "success", message: "Commendation deleted successfully" });
+    } catch (error) {
+        console.error("❌ Delete commendation error:", error);
+        res.status(500).json({ status: "error", message: "Server error", error: error.message });
+    }
+};
+
