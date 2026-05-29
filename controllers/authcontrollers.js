@@ -299,20 +299,11 @@ if (user.userType === "mentor") {
         status: "success"
       });
 
-// ✅ SECURE: Set HTTP-only cookie (backend handles token, frontend doesn't see it)
-res.cookie('authToken', token, {
-  httpOnly: true,              // ← Can't be accessed from JavaScript (prevents XSS)
-  secure: process.env.NODE_ENV === 'production',  // ← Only sent over HTTPS in production
-  sameSite: 'lax',             // ← Prevents CSRF attacks
-  path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
-});
-
 // Optional: log what you're sending
 return res.status(200).json({
   status: "success",
   message: "Login successful",
-  token: token, // ← Return token for backward compatibility with localStorage code
+  token,
   token_type: "Bearer",
   banner, // <-- this matches your frontend usage: result.banner
   user: {
@@ -358,14 +349,6 @@ const logout = async (req, res) => {
       status: "success"
     });
 
-    // ✅ SECURE: Clear HTTP-only cookie
-    res.clearCookie('authToken', {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/'
-    });
-
     res.status(200).json({ status: "success", message: "Logged out" });
   } catch (err) {
     console.error("Logout error:", err);
@@ -378,25 +361,14 @@ const logout = async (req, res) => {
   const authentication = async (req, res, next) => {
     try {
       let idToken = "";
-      
-      // ✅ SECURE: Check Authorization header first (most common - includes localStorage tokens)
       if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
         idToken = req.headers.authorization.split(" ")[1];
-      }
-      // Fallback: Check HTTP-only cookie
-      else if (req.cookies && req.cookies.authToken) {
-        idToken = req.cookies.authToken;
       }
 
       if (!idToken) {
         return res.status(401).json({ status: "fail", message: "Please login to get access" });
       }
-      
-      // ✅ Trim any whitespace from token
-      idToken = idToken.trim();
-      
-      // ✅ DEBUG: Log token format
-      console.log("🔐 Token from request:", idToken.substring(0, 20) + "...", "Length:", idToken.length);
+
 
       const tokenDetails = jwt.verify(idToken, SECRET_KEY);
       console.log("AUTH DEBUG tokenDetails:", tokenDetails);
