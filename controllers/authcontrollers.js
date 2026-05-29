@@ -445,7 +445,7 @@ console.log("✅ Authenticated user:", {
  const restrictTo = (...userType) => {
   return (req, res, next) => {
     console.log("🟢 restrictTo called");
-    console.log("Allowed types:", use rType);
+    console.log("Allowed types:", userType);
     console.log("Current user from token:", req.user?.userType);
 
     if (!userType.includes(req.user.userType)) {
