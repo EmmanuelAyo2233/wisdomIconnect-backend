@@ -95,10 +95,10 @@ const getMentorsDetails = async (req, res) => {
       ],
     });
 
-    // ✅ Fetch reviews (approved only; filter hidden in JS — isHidden col may not exist in DB)
+    // Fetch ALL reviews for this mentor — no status filter
     const Review = require("../models/review");
     const allReviews = await Review.findAll({
-      where: { mentorId: mentor.id, status: "approved" },
+      where: { mentorId: mentor.id },
       include: [{ model: Mentee, as: "mentee", include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }] }],
       order: [["createdAt", "DESC"]]
     });
@@ -211,7 +211,7 @@ const getMenteeProfileById = async (req, res) => {
 
     const attendanceRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
 
-    // Mentor Commendations (filter hidden in JS — isHidden col may not exist in DB)
+    // Fetch ALL commendations for this mentee — no status filter
     let commendations = [];
     try {
       if (MentorCommendation) {

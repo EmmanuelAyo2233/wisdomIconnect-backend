@@ -53,13 +53,12 @@ const getdetails = async (req, res) => {
           attendanceRate: scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 100
        };
 
-       const allReviews = await Review.findAll({
-          where: { mentorId: user.mentor.id, status: "approved" },
+       // Fetch ALL reviews for this mentor — no status/isHidden filter in SQL
+       reviews = await Review.findAll({
+          where: { mentorId: user.mentor.id },
           include: [{ model: Mentee, as: "mentee", include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }] }],
           order: [["createdAt", "DESC"]]
        });
-       // Filter hidden reviews in JS (isHidden column may not exist in DB yet)
-       reviews = allReviews.filter(r => !r.isHidden);
     } else if (user.userType === 'mentee' && user.mentee) {
        const appointments = await Appointment.findAll({ where: { menteeId: user.mentee.id } });
        let completedCount = 0;
@@ -78,13 +77,12 @@ const getdetails = async (req, res) => {
           attendanceRate: scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 100
        };
 
-       const allCommendations = await MentorCommendation.findAll({
-          where: { menteeId: user.mentee.id, status: "approved" },
+       // Fetch ALL commendations for this mentee — no status/isHidden filter in SQL
+       commendations = await MentorCommendation.findAll({
+          where: { menteeId: user.mentee.id },
           include: [{ model: Mentor, as: "mentor", include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }] }],
           order: [["createdAt", "DESC"]]
        });
-       // Filter hidden commendations in JS (isHidden column may not exist in DB yet)
-       commendations = allCommendations.filter(c => !c.isHidden);
     }
 
     // --- Gamification Sync Logic (Dynamic Milestone System) ---

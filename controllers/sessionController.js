@@ -504,8 +504,8 @@ exports.submitReview = async (req, res) => {
         }
 
         // Update mentor's average rating (only based on approved reviews to keep data authentic)
-        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId, status: "approved" } });
-        const allReviews2 = allReviews.filter(r => !r.isHidden); // filter hidden in JS (isHidden may not exist in DB)
+        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId } });
+        const allReviews2 = allReviews.filter(r => !r.isHidden);
         if (allReviews2.length > 0) {
             const avgRating = allReviews2.reduce((sum, r) => sum + r.rating, 0) / allReviews2.length;
             const roundedRating = Number(avgRating.toFixed(1));

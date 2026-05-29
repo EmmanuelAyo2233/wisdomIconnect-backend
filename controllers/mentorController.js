@@ -157,9 +157,9 @@ const getMentorsDetails = async (req, res) => {
 
     const attendanceRate = scheduledCount > 0 ? Math.round((completedCount / scheduledCount) * 100) : 0;
 
-    // Fetch Reviews — filter hidden in JS (isHidden may not exist in DB yet)
+    // Fetch ALL Reviews for this mentor — no status filter
     const allReviews = await Review.findAll({
-      where: { mentorId: mentor.id, status: "approved" },
+      where: { mentorId: mentor.id },
       include: [
         {
           model: Mentee,
