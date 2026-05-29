@@ -106,6 +106,18 @@ const migrate = async () => {
     ");"
   ];
 
+  // Reviews and Commendations - isFlagged and isHidden columns
+  const reviewCommendationQueries = [
+    "ALTER TABLE review ADD COLUMN isFlagged BOOLEAN DEFAULT false;",
+    "ALTER TABLE review ADD COLUMN isHidden BOOLEAN DEFAULT false;",
+    "ALTER TABLE mentor_commendation ADD COLUMN isFlagged BOOLEAN DEFAULT false;",
+    "ALTER TABLE mentor_commendation ADD COLUMN isHidden BOOLEAN DEFAULT false;",
+    "ALTER TABLE review MODIFY COLUMN status VARCHAR(20) DEFAULT 'approved';",
+    "ALTER TABLE mentor_commendation MODIFY COLUMN status VARCHAR(20) DEFAULT 'approved';"
+  ];
+
+  
+
   const allQueries = [
     ...appointmentQueries, 
     ...mentorSettingsQueries, 
@@ -114,7 +126,8 @@ const migrate = async () => {
     ...securityQueries, 
     ...activityQueries,
     ...refundEscrowQueries,
-    ...kycQueries
+    ...kycQueries,
+    ...reviewCommendationQueries
   ];
 
   for (const query of allQueries) {

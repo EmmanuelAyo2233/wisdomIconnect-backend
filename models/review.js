@@ -27,8 +27,18 @@ const Review = sequelize.define(
         },
         status: {
             type: DataTypes.STRING,
-            defaultValue: "pending",
+            defaultValue: "approved",
             field: "status"
+        },
+        isFlagged: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            comment: "Set to true if content is flagged by auto-moderation for admin review"
+        },
+        isHidden: {
+            type: DataTypes.BOOLEAN,
+            defaultValue: false,
+            comment: "Admin can hide inappropriate reviews"
         },
         appointmentId: {
             type: DataTypes.INTEGER,

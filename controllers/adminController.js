@@ -578,6 +578,102 @@ exports.getCommendationsForAdmin = async (req, res) => {
   }
 };
 
+// ✅ NEW: Hide a review from profile display
+exports.hideReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const review = await Review.findByPk(reviewId);
+    if (!review) return res.status(404).json({ status: "fail", message: "Review not found" });
+    
+    review.isHidden = true;
+    await review.save();
+    
+    await AdminLog.create({
+      adminId: req.user.id,
+      action: "HIDE_REVIEW",
+      targetId: reviewId.toString(),
+      details: `Hidden review for appointment ${review.appointmentId}`
+    });
+    
+    res.json({ status: "success", message: "Review hidden successfully ✅" });
+  } catch (error) {
+    console.error("Error hiding review:", error);
+    res.status(500).json({ status: "error", message: "Failed to hide review" });
+  }
+};
+
+// ✅ NEW: Unhide a review
+exports.unhideReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const review = await Review.findByPk(reviewId);
+    if (!review) return res.status(404).json({ status: "fail", message: "Review not found" });
+    
+    review.isHidden = false;
+    await review.save();
+    
+    await AdminLog.create({
+      adminId: req.user.id,
+      action: "UNHIDE_REVIEW",
+      targetId: reviewId.toString(),
+      details: `Unhidden review for appointment ${review.appointmentId}`
+    });
+    
+    res.json({ status: "success", message: "Review unhidden successfully ✅" });
+  } catch (error) {
+    console.error("Error unhiding review:", error);
+    res.status(500).json({ status: "error", message: "Failed to unhide review" });
+  }
+};
+
+// ✅ NEW: Hide a commendation from profile display
+exports.hideCommendation = async (req, res) => {
+  try {
+    const { commendationId } = req.params;
+    const commendation = await MentorCommendation.findByPk(commendationId);
+    if (!commendation) return res.status(404).json({ status: "fail", message: "Commendation not found" });
+    
+    commendation.isHidden = true;
+    await commendation.save();
+    
+    await AdminLog.create({
+      adminId: req.user.id,
+      action: "HIDE_COMMENDATION",
+      targetId: commendationId.toString(),
+      details: `Hidden commendation for appointment ${commendation.appointmentId}`
+    });
+    
+    res.json({ status: "success", message: "Commendation hidden successfully ✅" });
+  } catch (error) {
+    console.error("Error hiding commendation:", error);
+    res.status(500).json({ status: "error", message: "Failed to hide commendation" });
+  }
+};
+
+// ✅ NEW: Unhide a commendation
+exports.unhideCommendation = async (req, res) => {
+  try {
+    const { commendationId } = req.params;
+    const commendation = await MentorCommendation.findByPk(commendationId);
+    if (!commendation) return res.status(404).json({ status: "fail", message: "Commendation not found" });
+    
+    commendation.isHidden = false;
+    await commendation.save();
+    
+    await AdminLog.create({
+      adminId: req.user.id,
+      action: "UNHIDE_COMMENDATION",
+      targetId: commendationId.toString(),
+      details: `Unhidden commendation for appointment ${commendation.appointmentId}`
+    });
+    
+    res.json({ status: "success", message: "Commendation unhidden successfully ✅" });
+  } catch (error) {
+    console.error("Error unhiding commendation:", error);
+    res.status(500).json({ status: "error", message: "Failed to unhide commendation" });
+  }
+};
+
 exports.getDisputedSessions = async (req, res) => {
   try {
     const disputes = await Appointment.findAll({
@@ -662,6 +758,7 @@ exports.resolveDispute = async (req, res) => {
             details: "Released payout of " + (payment ? payment.amount : 0) + " to mentor."
         });
 
+        // ✅ FIXED: Keep reviews visible - session was completed favorably and mentor gets paid
         return res.json({ message: "Dispute resolved successfully. Payout released to mentor ✅", appointment });
     } else if (resolution === "refund_mentee") {
         appointment.status = "cancelled";
@@ -697,6 +794,19 @@ exports.resolveDispute = async (req, res) => {
             targetId: appointmentId.toString(),
             details: "Refunded mentee for payment of " + (payment ? payment.amount : 0)
         });
+
+        // ✅ FIXED: Hide associated reviews/commendations - session was disputed/refunded so reviews shouldn't show
+        const Review = require("../models/review");
+        const MentorCommendation = require("../models/mentorCommendation");
+        
+        await Review.update(
+            { isHidden: true }, // Hide review since session was disputed/refunded
+            { where: { appointmentId } }
+        );
+        await MentorCommendation.update(
+            { isHidden: true },
+            { where: { appointmentId } }
+        );
 
         return res.json({ message: "Dispute resolved successfully. Mentee refunded ✅", appointment });
     } else {

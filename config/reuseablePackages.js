@@ -42,6 +42,9 @@ console.log("SECRET_KEY loaded:", SECRET_KEY); // 🔍 debug
 // Frontend environment variables
 FRONTEND_URL = process.env.FRONTEND_URL;
 
+// ✅ FIXED: Backend URL for production image uploads
+BACKEND_URL = process.env.BACKEND_URL;
+
 // API base URL
 API_URL = "/api/v1";
 // Cloudinary environment variables
@@ -105,6 +108,7 @@ module.exports = {
     salt,
     helmet,
     API_URL,
+    BACKEND_URL,
     SECRET_KEY,
     Op,
     http,

@@ -481,7 +481,8 @@ exports.submitReview = async (req, res) => {
             });
         }
 
-        // Run auto-moderation
+        // ✅ FIXED: Always create reviews as "approved" so they show immediately on profile
+        // Flagged content is still visible but admin can review and hide if needed
         const moderationStatus = autoModerateText(comment);
 
         const review = await Review.create({
@@ -490,7 +491,8 @@ exports.submitReview = async (req, res) => {
             appointmentId: appointment.id,
             mentorId: appointment.mentorId,
             menteeId: mentee.id,
-            status: moderationStatus
+            status: "approved", // ✅ ALWAYS approved - shows immediately instead of pending
+            isFlagged: moderationStatus === "flagged" // Mark for admin review if flagged
         });
 
         appointment.menteeConfirmed = true;
@@ -502,7 +504,7 @@ exports.submitReview = async (req, res) => {
         }
 
         // Update mentor's average rating (only based on approved reviews to keep data authentic)
-        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId, status: "approved" } });
+        const allReviews = await Review.findAll({ where: { mentorId: appointment.mentorId, status: "approved", isHidden: false } }); // ✅ FIXED: Only use visible reviews for rating
         if (allReviews.length > 0) {
             const avgRating = allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length;
             const roundedRating = Number(avgRating.toFixed(1));
@@ -563,7 +565,8 @@ exports.submitCommendation = async (req, res) => {
             });
         }
 
-        // Run auto-moderation
+        // ✅ FIXED: Always create commendations as "approved" so they show immediately on profile
+        // Flagged content is still visible but admin can review and hide if needed
         const moderationStatus = autoModerateText(commendation);
 
         const newCommendation = await MentorCommendation.create({
@@ -572,7 +575,8 @@ exports.submitCommendation = async (req, res) => {
             appointmentId: appointment.id,
             mentorId: mentor.id,
             menteeId: appointment.menteeId,
-            status: moderationStatus
+            status: "approved", // ✅ ALWAYS approved - shows immediately instead of pending
+            isFlagged: moderationStatus === "flagged" // Mark for admin review if flagged
         });
 
         appointment.mentorConfirmed = true;

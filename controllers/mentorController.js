@@ -31,7 +31,7 @@ const getAllMentors = async (req, res) => {
     };
 
     const formatted = await Promise.all(mentors.map(async (m) => {
-      const reviewCount = await Review.count({ where: { mentorId: m.id } });
+      const reviewCount = await Review.count({ where: { mentorId: m.id, isHidden: false } }); // ✅ FIXED: Exclude hidden reviews
       return {
         id: m.id,
         user_id: m.user_id,
@@ -159,7 +159,7 @@ const getMentorsDetails = async (req, res) => {
 
     // Fetch Reviews
     const reviews = await Review.findAll({
-      where: { mentorId: mentor.id, status: "approved" },
+      where: { mentorId: mentor.id, status: "approved", isHidden: false }, // ✅ FIXED: Exclude hidden reviews
       include: [
         {
           model: Mentee,

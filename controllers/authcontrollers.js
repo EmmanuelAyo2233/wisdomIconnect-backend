@@ -378,19 +378,24 @@ const logout = async (req, res) => {
     try {
       let idToken = "";
       
-      // ✅ SECURE: Check HTTP-only cookie first (primary method)
-      if (req.cookies && req.cookies.authToken) {
-        idToken = req.cookies.authToken;
-      }
-      // Fallback: Check Authorization header for backward compatibility
-      else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      // ✅ SECURE: Check Authorization header first (most common - includes localStorage tokens)
+      if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
         idToken = req.headers.authorization.split(" ")[1];
+      }
+      // Fallback: Check HTTP-only cookie
+      else if (req.cookies && req.cookies.authToken) {
+        idToken = req.cookies.authToken;
       }
 
       if (!idToken) {
         return res.status(401).json({ status: "fail", message: "Please login to get access" });
       }
-
+      
+      // ✅ Trim any whitespace from token
+      idToken = idToken.trim();
+      
+      // ✅ DEBUG: Log token format
+      console.log("🔐 Token from request:", idToken.substring(0, 20) + "...", "Length:", idToken.length);
 
       const tokenDetails = jwt.verify(idToken, SECRET_KEY);
       console.log("AUTH DEBUG tokenDetails:", tokenDetails);

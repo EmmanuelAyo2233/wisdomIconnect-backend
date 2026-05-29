@@ -31,6 +31,10 @@ router.get("/user-activity/:id", adminController.getUserActivity);
 // Disputes, Reviews & Commendations audit panel routes
 router.get("/reviews", adminController.getReviewsForAdmin);
 router.get("/commendations", adminController.getCommendationsForAdmin);
+router.put("/reviews/:reviewId/hide", adminController.hideReview);
+router.put("/reviews/:reviewId/unhide", adminController.unhideReview);
+router.put("/commendations/:commendationId/hide", adminController.hideCommendation);
+router.put("/commendations/:commendationId/unhide", adminController.unhideCommendation);
 router.get("/disputes", adminController.getDisputedSessions);
 router.put("/disputes/:appointmentId/resolve", adminController.resolveDispute);
 

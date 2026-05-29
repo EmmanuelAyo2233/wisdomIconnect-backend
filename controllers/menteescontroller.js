@@ -168,7 +168,7 @@ const getMenteeProfileById = async (req, res) => {
     try {
       if (MentorCommendation) {
          commendations = await MentorCommendation.findAll({
-            where: { menteeId: mentee.id },
+            where: { menteeId: mentee.id, isHidden: false }, // ✅ FIXED: Exclude hidden commendations
             include: [{ model: Mentor, as: "mentor", include: [{ model: User, as: "user", attributes: ["name", "picture", "id"] }] }],
             order: [["createdAt", "DESC"]]
          });

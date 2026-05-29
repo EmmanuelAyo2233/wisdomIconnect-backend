@@ -212,7 +212,12 @@ const uploadChatFile = async (req, res) => {
     }
 
     const { filename, mimetype } = req.file;
-    const fileUrl = `${process.env.API_URL || "http://localhost:5000"}/uploads/${filename}`;
+    // ✅ FIXED: Use BACKEND_URL env variable or construct from request
+    const backendUrl = process.env.BACKEND_URL || 
+                      (req.get('origin')?.replace(/https?:\/\/[^:]+/, `${req.protocol}://${req.get('host')}`) || 
+                      `${req.protocol}://${req.get('host')}`) ||
+                      "http://localhost:5000";
+    const fileUrl = `${backendUrl}/uploads/${filename}`;
 
     const connection = await Connection.findOne({
       where: { id: connectionId, status: "accepted" }
