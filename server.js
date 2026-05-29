@@ -210,6 +210,27 @@ db.sequelize.sync() // creates missing tables but avoids complex alterations to 
             }
         }
 
+        // Safely add isFlagged and isHidden to review and mentor_commendation tables
+        try {
+            await db.sequelize.query("ALTER TABLE `review` ADD COLUMN `isFlagged` TINYINT(1) DEFAULT 0;");
+            await db.sequelize.query("ALTER TABLE `review` ADD COLUMN `isHidden` TINYINT(1) DEFAULT 0;");
+            console.log("✅ review table patched (isFlagged & isHidden)");
+        } catch (err) {
+            if (err.original && err.original.errno !== 1060) {
+                console.error("Note: could not patch review table:", err.message);
+            }
+        }
+
+        try {
+            await db.sequelize.query("ALTER TABLE `mentor_commendation` ADD COLUMN `isFlagged` TINYINT(1) DEFAULT 0;");
+            await db.sequelize.query("ALTER TABLE `mentor_commendation` ADD COLUMN `isHidden` TINYINT(1) DEFAULT 0;");
+            console.log("✅ mentor_commendation table patched (isFlagged & isHidden)");
+        } catch (err) {
+            if (err.original && err.original.errno !== 1060) {
+                console.error("Note: could not patch mentor_commendation table:", err.message);
+            }
+        }
+
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
