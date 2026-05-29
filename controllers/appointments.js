@@ -7,6 +7,7 @@ const Availability = require("../models/availability");
 const User = require("../models/user");
 const Review = require("../models/review");
 const MentorCommendation = require("../models/mentorCommendation");
+const PlatformSetting = require("../models/platformSetting");
 const { v4: uuidv4 } = require("uuid");
 const notificationService = require("../services/notificationService");
 const { logActivity } = require("../services/activityLogger");
@@ -163,8 +164,14 @@ exports.bookAppointment = async (req, res) => {
          return res.status(500).json({ status: "error", message: "Failed to verify payment with Paystack" });
       }
 
-      const platformShare = sessionAmount * 0.30;
-      const mentorShare = sessionAmount * 0.70;
+      // Fetch platform commission rate dynamically (default to 10% if not set)
+      const commissionSetting = await PlatformSetting.findByPk('platform_commission_rate');
+      const platformCommissionPercent = commissionSetting ? parseFloat(commissionSetting.value) : 10.0;
+      const platformShareRate = platformCommissionPercent / 100.0;
+      const mentorShareRate = 1.0 - platformShareRate;
+
+      const platformShare = sessionAmount * platformShareRate;
+      const mentorShare = sessionAmount * mentorShareRate;
 
       const Payment = require("../models/payment");
       const paymentStatus = mentor.autoAccept ? "pending" : "awaiting_acceptance";

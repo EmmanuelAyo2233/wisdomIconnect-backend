@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { Wallet, Payment, Appointment, Mentor, Mentee, User, Withdrawal } = require('../models');
+const { Wallet, Payment, Appointment, Mentor, Mentee, User, Withdrawal, PlatformSetting } = require('../models');
 const { Op } = require('sequelize');
 const notificationService = require("../services/notificationService");
 const { logActivity } = require("../services/activityLogger");
@@ -41,8 +41,15 @@ exports.verifyPayment = async (req, res) => {
         if (!appointment) return res.status(404).json({ success: false, message: "Appointment not found" });
 
         const amountNaira = data.amount / 100;
-        const mentorShare = amountNaira * 0.70;
-        const platformShare = amountNaira * 0.30;
+        
+        // Fetch platform commission rate dynamically (default to 10% if not set)
+        const commissionSetting = await PlatformSetting.findByPk('platform_commission_rate');
+        const platformCommissionPercent = commissionSetting ? parseFloat(commissionSetting.value) : 10.0;
+        const platformShareRate = platformCommissionPercent / 100.0;
+        const mentorShareRate = 1.0 - platformShareRate;
+
+        const mentorShare = amountNaira * mentorShareRate;
+        const platformShare = amountNaira * platformShareRate;
 
         const payment = await Payment.create({
             reference,
