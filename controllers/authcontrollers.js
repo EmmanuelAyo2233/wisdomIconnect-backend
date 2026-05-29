@@ -299,15 +299,6 @@ if (user.userType === "mentor") {
         status: "success"
       });
 
-// ✅ SECURE: Set HTTP-only cookie (backend handles token, frontend gets it too as fallback)
-res.cookie('authToken', token, {
-  httpOnly: true,              // ← Can't be accessed from JavaScript (prevents XSS)
-  secure: true,                // ← Always true to allow cross-site SameSite=None
-  sameSite: 'none',            // ← Required for cross-site (Vercel to Render) requests
-  path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
-});
-
 // Optional: log what you're sending
 return res.status(200).json({
   status: "success",
@@ -358,14 +349,6 @@ const logout = async (req, res) => {
       status: "success"
     });
 
-    // ✅ SECURE: Clear HTTP-only cookie
-    res.clearCookie('authToken', {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'none',
-      path: '/'
-    });
-
     res.status(200).json({ status: "success", message: "Logged out" });
   } catch (err) {
     console.error("Logout error:", err);
@@ -378,48 +361,16 @@ const logout = async (req, res) => {
   const authentication = async (req, res, next) => {
     try {
       let idToken = "";
-      let tokenSource = "";
-      let decoded = null;
-      let verifyError = null;
-
-      // 1. Try reading and verifying token from cookies (Primary method)
-      if (req.cookies && req.cookies.authToken) {
-        const cookieToken = req.cookies.authToken.trim();
-        try {
-          decoded = jwt.verify(cookieToken, SECRET_KEY);
-          idToken = cookieToken;
-          tokenSource = "cookie";
-        } catch (err) {
-          verifyError = err;
-          console.warn("⚠️ Cookie verification failed, will try header fallback. Error:", err.message);
-        }
+      if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+        idToken = req.headers.authorization.split(" ")[1];
       }
 
-      // 2. Fallback: Try reading and verifying token from Authorization header
-      if (!decoded && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
-        const headerParts = req.headers.authorization.split(" ");
-        const headerToken = headerParts.length > 1 ? headerParts[1].trim() : "";
-        if (headerToken) {
-          try {
-            decoded = jwt.verify(headerToken, SECRET_KEY);
-            idToken = headerToken;
-            tokenSource = "header";
-            verifyError = null; // Clear previous cookie error if header verification succeeds
-          } catch (err) {
-            verifyError = err;
-            console.error("❌ Header verification failed too. Error:", err.message);
-          }
-        }
+      if (!idToken) {
+        return res.status(401).json({ status: "fail", message: "Please login to get access" });
       }
 
-      // If we couldn't verify using either method, return 401
-      if (!decoded) {
-        const errMsg = verifyError ? verifyError.message : "Please login to get access";
-        return res.status(401).json({ status: "fail", message: "JWT: " + errMsg });
-      }
-
-      const tokenDetails = decoded;
-      console.log(`🔑 AUTH SUCCESS via ${tokenSource}. User ID: ${tokenDetails.id}`);
+      const tokenDetails = jwt.verify(idToken, SECRET_KEY);
+      console.log("AUTH DEBUG tokenDetails:", tokenDetails);
 
       const freshUser = await User.findOne({
         where: {
@@ -683,15 +634,6 @@ console.log("✅ Authenticated user:", {
         status: user.status
       };
       const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
-
-      // ✅ SECURE: Set HTTP-only cookie
-      res.cookie('authToken', token, {
-        httpOnly: true,
-        secure: true,
-        sameSite: 'none',
-        path: '/',
-        maxAge: 7 * 24 * 60 * 60 * 1000
-      });
 
       return res.status(200).json({ 
          status: "success", 

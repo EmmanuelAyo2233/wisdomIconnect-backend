@@ -14,15 +14,7 @@ function setupWebsocket(io) {
 
   // 🔐 SOCKET AUTH
   chatNamespace.use((socket, next) => {
-    let token = socket.handshake.auth?.token;
-
-    // ✅ SECURE: Fallback to reading token from cookies (for HttpOnly credentials storage)
-    if (!token && socket.handshake.headers.cookie) {
-      const cookie = require("cookie");
-      const cookies = cookie.parse(socket.handshake.headers.cookie);
-      token = cookies.authToken;
-    }
-
+    const token = socket.handshake.auth?.token;
     if (!token) return next(new Error("No token provided ❌"));
 
     try {
