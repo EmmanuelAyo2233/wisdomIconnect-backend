@@ -312,6 +312,7 @@ res.cookie('authToken', token, {
 return res.status(200).json({
   status: "success",
   message: "Login successful",
+  token: token, // ← Return token for backward compatibility with localStorage code
   token_type: "Bearer",
   banner, // <-- this matches your frontend usage: result.banner
   user: {
@@ -444,7 +445,7 @@ console.log("✅ Authenticated user:", {
  const restrictTo = (...userType) => {
   return (req, res, next) => {
     console.log("🟢 restrictTo called");
-    console.log("Allowed types:", userType);
+    console.log("Allowed types:", use rType);
     console.log("Current user from token:", req.user?.userType);
 
     if (!userType.includes(req.user.userType)) {
