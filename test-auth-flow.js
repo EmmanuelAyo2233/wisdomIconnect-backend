@@ -1,11 +1,11 @@
 const http = require('http');
+const { User, Mentee } = require('./models');
 
-// Test the complete auth flow
-const baseURL = 'http://localhost:5000/api/v1';
+const baseURL = 'http://localhost:5001/api/v1';
 
-async function makeRequest(method, endpoint, data = null, token = null) {
+async function makeRequest(method, endpoint, data = null, headers = {}) {
   return new Promise((resolve, reject) => {
-    const url = new URL(endpoint, baseURL);
+    const url = new URL(baseURL + endpoint);
     const options = {
       hostname: url.hostname,
       port: url.port,
@@ -13,12 +13,9 @@ async function makeRequest(method, endpoint, data = null, token = null) {
       method: method,
       headers: {
         'Content-Type': 'application/json',
+        ...headers,
       },
     };
-
-    if (token) {
-      options.headers['Authorization'] = `Bearer ${token}`;
-    }
 
     const req = http.request(options, (res) => {
       let body = '';
@@ -27,11 +24,13 @@ async function makeRequest(method, endpoint, data = null, token = null) {
         try {
           resolve({
             status: res.statusCode,
+            headers: res.headers,
             body: JSON.parse(body),
           });
         } catch (e) {
           resolve({
             status: res.statusCode,
+            headers: res.headers,
             body: body,
           });
         }
@@ -48,54 +47,133 @@ async function makeRequest(method, endpoint, data = null, token = null) {
 }
 
 async function testAuthFlow() {
-  console.log('🧪 Testing Auth Flow...\n');
+  console.log('🧪 Testing HttpOnly Cookie Auth Flow...\n');
+  const email = `testuser-${Date.now()}@example.com`;
+  const password = 'password123';
+  const name = 'Test Cookie User';
 
   try {
-    // 1. Test login
-    console.log('📝 1. Testing LOGIN...');
-    const loginRes = await makeRequest('POST', '/auth/login', {
-      email: 'mentor1@example.com',
-      password: 'password123',
+    // 1. Register a new Mentee
+    console.log(`📝 1. Registering user ${email}...`);
+    const registerRes = await makeRequest('POST', '/auth/register', {
+      name,
+      email,
+      password,
+      confirmPassword: password,
+      userType: 'mentee',
+      interests: ['Guidance in Web Development']
     });
-    console.log('   Status:', loginRes.status);
-    console.log('   Response:', JSON.stringify(loginRes.body, null, 2));
-    
-    if (loginRes.status !== 200) {
-      console.error('   ❌ Login failed!');
+
+    console.log('   Status:', registerRes.status);
+    if (registerRes.status !== 201) {
+      console.error('   ❌ Registration failed:', registerRes.body);
       return;
     }
+    console.log('   ✅ Registration successful.');
 
-    const token = loginRes.body.token;
-    if (!token) {
-      console.error('   ❌ Token not in response!');
+    // 2. Fetch OTP from DB
+    console.log('🔍 2. Retrieving verification OTP from database...');
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      console.error('   ❌ User not found in DB!');
       return;
     }
-    console.log('   ✅ Token received:', token.substring(0, 20) + '...');
+    const otp = user.verificationToken;
+    console.log('   ✅ Found OTP:', otp);
 
-    // 2. Test protected endpoint WITH token
-    console.log('\n🔐 2. Testing Protected Endpoint WITH token...');
-    const meRes = await makeRequest('GET', '/user/me', null, token);
-    console.log('   Status:', meRes.status);
-    console.log('   Response:', JSON.stringify(meRes.body, null, 2).substring(0, 200));
+    // 3. Verify Email and get cookie
+    console.log('✉️ 3. Verifying email via /auth/verify-email...');
+    const verifyRes = await makeRequest('POST', '/auth/verify-email', {
+      email,
+      otp
+    });
+
+    console.log('   Status:', verifyRes.status);
+    const cookies = verifyRes.headers['set-cookie'];
+    console.log('   Cookies returned:', cookies);
     
-    if (meRes.status === 200) {
-      console.log('   ✅ Protected endpoint works with token!');
+    let hasAuthTokenCookie = cookies && cookies.some(c => c.startsWith('authToken='));
+    if (hasAuthTokenCookie) {
+      console.log('   ✅ Cookie "authToken" is present in Set-Cookie headers!');
     } else {
-      console.error('   ❌ Protected endpoint failed with token!');
+      console.error('   ❌ Cookie "authToken" is MISSING!');
     }
 
-    // 3. Test protected endpoint WITHOUT token
-    console.log('\n❌ 3. Testing Protected Endpoint WITHOUT token (should fail)...');
-    const noTokenRes = await makeRequest('GET', '/user/me', null, null);
-    console.log('   Status:', noTokenRes.status);
-    console.log('   Response:', JSON.stringify(noTokenRes.body, null, 2));
-    
-    if (noTokenRes.status === 401) {
-      console.log('   ✅ Correctly rejected without token!');
+    const token = verifyRes.body.token;
+    console.log('   ✅ Token in JSON response body:', token ? 'Present' : 'Missing');
+
+    // Extract the cookie string
+    const cookieHeader = cookies ? cookies.map(c => c.split(';')[0]).join('; ') : '';
+
+    // 4. Test accessing protected endpoint WITH Cookie (no Auth header)
+    console.log('\n🔒 4. Accessing protected endpoint /user/me WITH cookie (no Auth header)...');
+    const meResWithCookie = await makeRequest('GET', '/user/me', null, {
+      'Cookie': cookieHeader
+    });
+
+    console.log('   Status:', meResWithCookie.status);
+    if (meResWithCookie.status === 200) {
+      console.log('   ✅ Successfully authenticated using HttpOnly cookie!');
+      console.log('   User Profile:', meResWithCookie.body.data.name, `(${meResWithCookie.body.data.email})`);
+    } else {
+      console.error('   ❌ Cookie authentication failed:', meResWithCookie.body);
     }
+
+    // 5. Test accessing protected endpoint WITH Authorization header fallback (no cookie)
+    console.log('\n🔒 5. Accessing protected endpoint /user/me WITH Authorization header (no cookie)...');
+    const meResWithHeader = await makeRequest('GET', '/user/me', null, {
+      'Authorization': `Bearer ${token}`
+    });
+
+    console.log('   Status:', meResWithHeader.status);
+    if (meResWithHeader.status === 200) {
+      console.log('   ✅ Successfully authenticated using Authorization header!');
+    } else {
+      console.error('   ❌ Authorization header authentication failed:', meResWithHeader.body);
+    }
+
+    // 6. Test login
+    console.log('\n🔑 6. Testing /auth/login...');
+    const loginRes = await makeRequest('POST', '/auth/login', {
+      email,
+      password
+    });
+
+    console.log('   Status:', loginRes.status);
+    const loginCookies = loginRes.headers['set-cookie'];
+    console.log('   Login cookies:', loginCookies);
+    if (loginCookies && loginCookies.some(c => c.startsWith('authToken='))) {
+      console.log('   ✅ Login cookie "authToken" set successfully!');
+    } else {
+      console.error('   ❌ Login cookie missing!');
+    }
+
+    const loginCookieHeader = loginCookies ? loginCookies.map(c => c.split(';')[0]).join('; ') : '';
+
+    // 7. Test logout
+    console.log('\n🚪 7. Testing /auth/logout...');
+    const logoutRes = await makeRequest('POST', '/auth/logout', null, {
+      'Cookie': loginCookieHeader
+    });
+
+    console.log('   Status:', logoutRes.status);
+    const logoutCookies = logoutRes.headers['set-cookie'];
+    console.log('   Logout cookies:', logoutCookies);
+    if (logoutCookies && logoutCookies.some(c => c.includes('authToken=;'))) {
+      console.log('   ✅ Logout cleared cookie successfully!');
+    } else {
+      console.error('   ❌ Logout failed to clear cookie!');
+    }
+
+    // Clean up test user
+    console.log('\n🧹 Cleaning up test user...');
+    await user.destroy();
+    console.log('   Done.');
 
   } catch (error) {
-    console.error('❌ Test failed:', error.message);
+    console.error('❌ Test execution error:', error);
+  } finally {
+    process.exit(0);
   }
 }
 

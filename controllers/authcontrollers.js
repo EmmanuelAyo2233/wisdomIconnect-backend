@@ -299,6 +299,15 @@ if (user.userType === "mentor") {
         status: "success"
       });
 
+// ✅ SECURE: Set HTTP-only cookie (backend handles token, frontend gets it too as fallback)
+res.cookie('authToken', token, {
+  httpOnly: true,              // ← Can't be accessed from JavaScript (prevents XSS)
+  secure: true,                // ← Always true to allow cross-site SameSite=None
+  sameSite: 'none',            // ← Required for cross-site (Vercel to Render) requests
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000  // 7 days
+});
+
 // Optional: log what you're sending
 return res.status(200).json({
   status: "success",
@@ -349,6 +358,14 @@ const logout = async (req, res) => {
       status: "success"
     });
 
+    // ✅ SECURE: Clear HTTP-only cookie
+    res.clearCookie('authToken', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      path: '/'
+    });
+
     res.status(200).json({ status: "success", message: "Logged out" });
   } catch (err) {
     console.error("Logout error:", err);
@@ -361,7 +378,13 @@ const logout = async (req, res) => {
   const authentication = async (req, res, next) => {
     try {
       let idToken = "";
-      if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+      
+      // ✅ SECURE: Check HTTP-only cookie first (primary method)
+      if (req.cookies && req.cookies.authToken) {
+        idToken = req.cookies.authToken;
+      }
+      // Fallback: Check Authorization header for backward compatibility
+      else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
         idToken = req.headers.authorization.split(" ")[1];
       }
 
@@ -635,6 +658,15 @@ console.log("✅ Authenticated user:", {
         status: user.status
       };
       const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
+
+      // ✅ SECURE: Set HTTP-only cookie
+      res.cookie('authToken', token, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'none',
+        path: '/',
+        maxAge: 7 * 24 * 60 * 60 * 1000
+      });
 
       return res.status(200).json({ 
          status: "success", 
