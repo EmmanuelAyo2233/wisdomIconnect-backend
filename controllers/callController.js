@@ -12,48 +12,37 @@ exports.verifyCallAccess = async (req, res) => {
             return res.status(404).json({ status: "fail", message: "Meeting not found ❌" });
         }
 
-        if (appointment.status !== "accepted") {
-            return res.status(400).json({ status: "fail", message: "Meeting is not active ❌" });
+        const allowedStatuses = ["accepted", "ongoing", "in_progress"];
+        if (!allowedStatuses.includes(appointment.status)) {
+            return res.status(400).json({ status: "fail", message: `Meeting is not active (Status: ${appointment.status}) ❌` });
         }
 
-        // Verify User is mentor or mentee of this appointment
+        // Verify User is mentor or mentee of this appointment directly by user_id
+        const mentorRecord = await Mentor.findOne({ where: { user_id: userId } });
+        const menteeRecord = await Mentee.findOne({ where: { user_id: userId } });
+
         let isAuthorized = false;
-        if (role === "mentor") {
-            const mentor = await Mentor.findOne({ where: { user_id: userId } });
-            if (mentor && mentor.id === appointment.mentorId) isAuthorized = true;
-        } else if (role === "mentee") {
-            const mentee = await Mentee.findOne({ where: { user_id: userId } });
-            if (mentee && mentee.id === appointment.menteeId) isAuthorized = true;
+        let userRoleInCall = role || req.user.role;
+
+        if (mentorRecord && mentorRecord.id === appointment.mentorId) {
+            isAuthorized = true;
+            userRoleInCall = "mentor";
+        } else if (menteeRecord && menteeRecord.id === appointment.menteeId) {
+            isAuthorized = true;
+            userRoleInCall = "mentee";
+        } else if (req.user.userType === "admin" || req.user.role === "admin") {
+            isAuthorized = true;
         }
 
         if (!isAuthorized) {
             return res.status(403).json({ status: "fail", message: "Unauthorized to join this call ❌" });
         }
 
-        // Time Validation: Can only join 5 minutes before startTime
-        // The date and startTime from the appointment
-        const [year, month, day] = appointment.date.split("-");
-        const [hours, minutes, seconds] = appointment.startTime.split(":");
-        
-        const sessionStartTime = new Date(year, month - 1, day, hours, minutes, seconds || 0);
-        const currentTime = new Date();
-        
-        const diffMs = sessionStartTime.getTime() - currentTime.getTime();
-        const diffMinutes = Math.floor(diffMs / 60000);
-
-        // if (diffMinutes > 60) {
-        //     return res.status(403).json({ 
-        //         status: "fail", 
-        //         message: `Too early. You can join 60 minutes before the scheduled time (${appointment.startTime}).` 
-        //     });
-        // }
-
         // Payment validation
         const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
         if (payment && payment.amount > 0) {
-            // "pending" means it's paid and in escrow. "awaiting_acceptance" means mentor hasn't accepted.
-            // If it's accepted, payment is pending.
-            if (payment.status !== "pending" && payment.status !== "released") {
+            const validPaymentStatuses = ["pending", "released", "completed", "successful", "escrow", "awaiting_acceptance"];
+            if (!validPaymentStatuses.includes(payment.status)) {
                 return res.status(403).json({ status: "fail", message: "Payment not completed for this session." });
             }
         }
@@ -84,7 +73,7 @@ exports.verifyCallAccess = async (req, res) => {
             data: {
                 appointmentId: appointment.id,
                 meetingId: appointment.meetingId,
-                role: role,
+                role: userRoleInCall,
                 startTime: appointment.startTime,
                 endTime: appointment.endTime,
                 callStartedAt: appointment.callStartedAt,
