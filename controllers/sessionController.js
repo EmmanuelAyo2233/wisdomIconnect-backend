@@ -105,7 +105,7 @@ async function performSessionCompletion(appointment, completionMethod = 'automat
     const mentor = await Mentor.findByPk(appointment.mentorId, { include: ["user"] });
     if (mentor && mentor.user) {
         mentor.user.sessionsCompleted = (mentor.user.sessionsCompleted || 0) + 1;
-        
+
         // Upgrade logic
         if (mentor.user.sessionsCompleted >= 50 && mentor.user.rating >= 4.5) {
             mentor.user.mentorLevel = "gold";
@@ -128,7 +128,7 @@ async function performSessionCompletion(appointment, completionMethod = 'automat
     if (mentee && mentee.user) {
         mentee.user.sessionsCompleted = (mentee.user.sessionsCompleted || 0) + 1;
         await mentee.user.save();
-        
+
         // 🏆 Dynamic achievement check with full stats
         const menteeCompletedAppts = await Appointment.count({ where: { menteeId: mentee.id, status: 'completed' } });
         const menteeBookings = await Appointment.count({ where: { menteeId: mentee.id } });
@@ -159,20 +159,20 @@ async function performSessionCompletion(appointment, completionMethod = 'automat
         const User = require("../models/user");
         const admin = await User.findOne({ where: { userType: 'admin' } });
         if (admin) {
-             const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
-             if (adminWallet) {
-                  adminWallet.pendingBalance -= payment.platformShare;
-                  adminWallet.availableBalance += payment.platformShare;
-                  adminWallet.totalEarned += payment.platformShare;
-                  await adminWallet.save();
-             }
+            const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
+            if (adminWallet) {
+                adminWallet.pendingBalance -= payment.platformShare;
+                adminWallet.availableBalance += payment.platformShare;
+                adminWallet.totalEarned += payment.platformShare;
+                await adminWallet.save();
+            }
         }
     }
 }
 
 function autoModerateText(text) {
     if (!text) return "approved";
-    
+
     // Email pattern
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/i;
     // Phone number pattern (looks for strings of 7 to 15 digits, optionally with spaces/dashes/pluses)
@@ -362,28 +362,86 @@ exports.endSession = async (req, res) => {
         }
         appointment.duration = actualMinutes;
 
-        // Auto-complete ALL sessions immediately — no dispute hold
-        // Paid & free sessions both release escrow right away when call ends
-        await performSessionCompletion(appointment, "automatic");
-        logActivity({
-            type: "SESSION",
-            message: `Session completed (Appointment ID ${appointment.id}) — ended by ${role}`,
-            userId,
-            targetId: appointment.id,
-            status: "success",
-            metadata: {
-                appointmentId,
-                actualMinutes,
-                sessionType: appointment.sessionType
-            }
-        });
-        return res.status(200).json({
-            status: "success",
-            message: "Session completed successfully. Payout released! ✅",
-            data: appointment,
-            completed: true
-        });
+        // Auto-complete free sessions
+        if (appointment.sessionType === "free") {
+            await performSessionCompletion(appointment, "automatic");
+            logActivity({
+                type: "SESSION",
+                message: `Free session completed successfully (Appointment ID ${appointment.id})`,
+                userId,
+                targetId: appointment.id,
+                status: "success",
+                metadata: {
+                    appointmentId,
+                    sessionType: "free"
+                }
+            });
+            return res.status(200).json({
+                status: "success",
+                message: "Free session completed successfully ✅",
+                data: appointment,
+                completed: true
+            });
+        }
 
+        // Validate 70% threshold for paid sessions
+        const threshold = 0.70 * scheduledMinutes;
+        if (actualMinutes < threshold) {
+            // Under threshold -> Dispute
+            appointment.status = "under_review";
+            appointment.disputedBy = "system";
+            appointment.disputeReason = `Session ended early. Scheduled: ${scheduledMinutes}m, Actual: ${actualMinutes}m. Under 70% threshold (${Math.round(threshold)}m).`;
+            await appointment.save();
+
+            const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
+            if (payment) {
+                payment.status = "disputed";
+                await payment.save();
+            }
+
+            logActivity({
+                type: "SESSION",
+                message: `Session early end dispute triggered for Appointment ID ${appointment.id} (Under 70% threshold)`,
+                userId,
+                targetId: appointment.id,
+                status: "failed",
+                metadata: {
+                    appointmentId,
+                    scheduledMinutes,
+                    actualMinutes,
+                    threshold
+                }
+            });
+
+            return res.status(200).json({
+                status: "success",
+                message: "Session ended early and marked under review. Escrow locked 🔒",
+                data: appointment,
+                underReview: true
+            });
+        } else {
+            // Threshold met -> Auto-Complete and release escrow immediately!
+            await performSessionCompletion(appointment, "automatic");
+            logActivity({
+                type: "SESSION",
+                message: `Paid session completed successfully and payout released (Appointment ID ${appointment.id})`,
+                userId,
+                targetId: appointment.id,
+                status: "success",
+                metadata: {
+                    appointmentId,
+                    scheduledMinutes,
+                    actualMinutes,
+                    sessionType: "paid"
+                }
+            });
+            return res.status(200).json({
+                status: "success",
+                message: "Session completed successfully. Payout released! ✅",
+                data: appointment,
+                completed: true
+            });
+        }
     } catch (error) {
         console.error("❌ End session error:", error);
         res.status(500).json({ status: "error", message: "Server error ❌", error: error.message });
@@ -399,12 +457,12 @@ exports.submitReview = async (req, res) => {
         const mentee = await Mentee.findOne({ where: { user_id: userId } });
         if (!mentee) return res.status(403).json({ status: "fail", message: "Only mentees can submit reviews ❌" });
 
-        const appointment = await Appointment.findOne({ 
-            where: { 
-                id: appointmentId, 
-                menteeId: mentee.id, 
-                status: { [Op.in]: ["completed", "call_ended", "under_review", "ongoing"] } 
-            } 
+        const appointment = await Appointment.findOne({
+            where: {
+                id: appointmentId,
+                menteeId: mentee.id,
+                status: { [Op.in]: ["completed", "call_ended", "under_review", "ongoing"] }
+            }
         });
         if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
 
@@ -455,7 +513,7 @@ exports.submitReview = async (req, res) => {
             const mentor = await Mentor.findByPk(appointment.mentorId, { include: ["user"] });
             if (mentor && mentor.user) {
                 mentor.user.rating = roundedRating;
-                
+
                 // Re-evaluate level
                 if (mentor.user.sessionsCompleted >= 50 && mentor.user.rating >= 4.5) {
                     mentor.user.mentorLevel = "gold";
@@ -484,12 +542,12 @@ exports.submitCommendation = async (req, res) => {
         const mentor = await Mentor.findOne({ where: { user_id: userId } });
         if (!mentor) return res.status(403).json({ status: "fail", message: "Only mentors can submit commendations ❌" });
 
-        const appointment = await Appointment.findOne({ 
-            where: { 
-                id: appointmentId, 
-                mentorId: mentor.id, 
-                status: { [Op.in]: ["completed", "call_ended", "under_review", "ongoing"] } 
-            } 
+        const appointment = await Appointment.findOne({
+            where: {
+                id: appointmentId,
+                mentorId: mentor.id,
+                status: { [Op.in]: ["completed", "call_ended", "under_review", "ongoing"] }
+            }
         });
         if (!appointment) return res.status(404).json({ status: "fail", message: "Appointment not found ❌" });
 
