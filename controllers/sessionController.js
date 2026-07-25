@@ -362,86 +362,28 @@ exports.endSession = async (req, res) => {
         }
         appointment.duration = actualMinutes;
 
-        // Auto-complete free sessions
-        if (appointment.sessionType === "free") {
-            await performSessionCompletion(appointment, "automatic");
-            logActivity({
-                type: "SESSION",
-                message: `Free session completed successfully (Appointment ID ${appointment.id})`,
-                userId,
-                targetId: appointment.id,
-                status: "success",
-                metadata: {
-                    appointmentId,
-                    sessionType: "free"
-                }
-            });
-            return res.status(200).json({
-                status: "success",
-                message: "Free session completed successfully ✅",
-                data: appointment,
-                completed: true
-            });
-        }
-
-        // Validate 70% threshold for paid sessions
-        const threshold = 0.70 * scheduledMinutes;
-        if (actualMinutes < threshold) {
-            // Under threshold -> Dispute
-            appointment.status = "under_review";
-            appointment.disputedBy = "system";
-            appointment.disputeReason = `Session ended early. Scheduled: ${scheduledMinutes}m, Actual: ${actualMinutes}m. Under 70% threshold (${Math.round(threshold)}m).`;
-            await appointment.save();
-
-            const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
-            if (payment) {
-                payment.status = "disputed";
-                await payment.save();
+        // Auto-complete ALL sessions immediately — no dispute hold
+        // Paid & free sessions both release escrow right away when call ends
+        await performSessionCompletion(appointment, "automatic");
+        logActivity({
+            type: "SESSION",
+            message: `Session completed (Appointment ID ${appointment.id}) — ended by ${role}`,
+            userId,
+            targetId: appointment.id,
+            status: "success",
+            metadata: {
+                appointmentId,
+                actualMinutes,
+                sessionType: appointment.sessionType
             }
+        });
+        return res.status(200).json({
+            status: "success",
+            message: "Session completed successfully. Payout released! ✅",
+            data: appointment,
+            completed: true
+        });
 
-            logActivity({
-                type: "SESSION",
-                message: `Session early end dispute triggered for Appointment ID ${appointment.id} (Under 70% threshold)`,
-                userId,
-                targetId: appointment.id,
-                status: "failed",
-                metadata: {
-                    appointmentId,
-                    scheduledMinutes,
-                    actualMinutes,
-                    threshold
-                }
-            });
-
-            return res.status(200).json({
-                status: "success",
-                message: "Session ended early and marked under review. Escrow locked 🔒",
-                data: appointment,
-                underReview: true
-            });
-        } else {
-            // Threshold met -> Auto-Complete and release escrow immediately!
-            await performSessionCompletion(appointment, "automatic");
-            logActivity({
-                type: "SESSION",
-                message: `Paid session completed successfully and payout released (Appointment ID ${appointment.id})`,
-                userId,
-                targetId: appointment.id,
-                status: "success",
-                metadata: {
-                    appointmentId,
-                    scheduledMinutes,
-                    actualMinutes,
-                    sessionType: "paid"
-                }
-            });
-            return res.status(200).json({
-                status: "success",
-                message: "Session completed successfully. Payout released! ✅",
-                data: appointment,
-                completed: true
-            });
-        }
     } catch (error) {
         console.error("❌ End session error:", error);
         res.status(500).json({ status: "error", message: "Server error ❌", error: error.message });
