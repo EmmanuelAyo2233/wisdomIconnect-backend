@@ -15,7 +15,7 @@ const {
 const { upload } = require("../utils/cloudinary");
 
 const rateLimiter = require("../config/rateLimiter");
-const authLimiter = rateLimiter({ windowMs: 15 * 60 * 1000, max: 15, message: "Too many login/auth requests from this IP. Please try again after 15 minutes." });
+const authLimiter = rateLimiter({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login/auth requests from this IP. Please try again after 15 minutes." });
 
 const router = express.Router();
 
