@@ -55,4 +55,13 @@ router.get("/status", restrictTo("mentor"), getMyKycStatus);
 router.get("/admin/all", restrictTo("admin"), getAllKycSubmissions);
 router.patch("/admin/:id/review", restrictTo("admin"), reviewKyc);
 
+// ─── Secure KYC Document Serving ─────────────────────────────────────────────
+router.get("/document/:filename", (req, res) => {
+  const filePath = path.join(kycUploadDir, path.basename(req.params.filename));
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ status: "fail", message: "Document not found" });
+  }
+  res.sendFile(filePath);
+});
+
 module.exports = router;

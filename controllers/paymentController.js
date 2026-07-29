@@ -279,12 +279,11 @@ exports.withdrawFunds = async (req, res) => {
         wallet.availableBalance -= amount;
         await wallet.save();
 
-        // Create Withdrawal
+        // Create Withdrawal (marked pending for admin processing / payout verification)
         await Withdrawal.create({
              mentorId: mentor.id,
              amount,
-             status: 'completed' 
-             // In prod: call Paystack Transfers, set to pending if async
+             status: 'pending'
         });
 
         const user = await User.findByPk(userId);

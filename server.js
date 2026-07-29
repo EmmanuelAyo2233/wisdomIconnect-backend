@@ -1,4 +1,6 @@
 require("dotenv").config();
+const validateEnv = require("./config/envValidator");
+validateEnv();
 const { db } = require("./models");
 
 
@@ -60,7 +62,10 @@ app.use(helmet({
 }));
 app.use(express.json());
 app.use(cookieParser());
-app.use(express.urlencoded({ extended: true }));
+// Protect KYC uploads from unauthenticated direct public access
+app.use('/uploads/kyc', (req, res) => {
+    res.status(403).json({ status: "fail", message: "Direct static access to KYC documents is restricted. Access via /api/v1/kyc/document/:filename" });
+});
 app.use('/uploads', express.static('uploads')); // serve images
 
 // Setup Websocket.io connection for chat
@@ -141,6 +146,28 @@ app.use(`${API_URL}/settings`, platformSettingRoutes);
 
 app.get("/test-notifications", (req, res) => {
   res.json({ message: "Notifications route is alive ✅" });
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "ok",
+    uptime: Math.floor(process.uptime()),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// --- Global Error Handling Middleware ---
+app.use((err, req, res, next) => {
+  console.error("Unhandled error:", err);
+  const statusCode = err.statusCode || 500;
+  const response = {
+    status: "fail",
+    message: err.message || "Internal server error"
+  };
+  if (process.env.NODE_ENV !== "production" && err.stack) {
+    response.stack = err.stack;
+  }
+  res.status(statusCode).json(response);
 });
 
 

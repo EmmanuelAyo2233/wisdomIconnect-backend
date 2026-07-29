@@ -14,10 +14,13 @@ const {
 } = require("../controllers/authcontrollers");
 const { upload } = require("../utils/cloudinary");
 
+const rateLimiter = require("../config/rateLimiter");
+const authLimiter = rateLimiter({ windowMs: 15 * 60 * 1000, max: 15, message: "Too many login/auth requests from this IP. Please try again after 15 minutes." });
+
 const router = express.Router();
 
 router.post("/register", upload.single("certificate"), signup);
-router.route("/login").post(login);
+router.route("/login").post(authLimiter, login);
 
 const { db, User, Mentor } = require("../models");
 router.get("/fix-db", async (req, res) => {
@@ -35,11 +38,11 @@ router.get("/fix-db", async (req, res) => {
     }
 });
 
-router.post("/forgot-password", forgotPassword);
-router.post("/reset-password", resetPassword);
+router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/reset-password", authLimiter, resetPassword);
 router.post("/logout",  authentication, logout);
 router.post("/verify-email", verifyEmail);
-router.post("/resend-verification", resendVerification);
+router.post("/resend-verification", authLimiter, resendVerification);
 
 // Admin-only routes for mentor approval/rejection
 router.patch(

@@ -1,7 +1,5 @@
 // controllers/adminController.js
-const User = require("../models/user");
-const Mentor = require("../models/mentor");
-const Mentee = require("../models/mentee");
+const { User, Mentor, Mentee, Appointment, AdminLog, Payment, Report, Review, MentorCommendation, Wallet } = require("../models");
 
 // --- Get all users
 exports.getAllUsers = async (req, res) => {
@@ -410,8 +408,6 @@ exports.deleteMentee = async (req, res) => {
 };
 
 // --- Advanced User Actions ---
-
-const { AdminLog, Payment, Appointment, Report, Review, MentorCommendation } = require('../models');
 
 exports.suspendUser = async (req, res) => {
   try {

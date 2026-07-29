@@ -28,43 +28,42 @@ dotenv.config();
 const PORT = process.env.PORT;
 
 // Database environment variables
-TEST_DATABASE = process.env.TEST_DATABASE;
-DB_USERNAME = process.env.DB_USERNAME;
-DB_NAME = process.env.DB_NAME;
-DB_NAME_TEST = process.env.DB_NAME_TEST;
-DB_NAME_DEV = process.env.DB_NAME_DEV;
-DB_PORT = process.env.DB_PORT;
-DB_PASSWORD = process.env.DB_PASSWORD;
-DB_HOST = process.env.DB_HOST;
+const TEST_DATABASE = process.env.TEST_DATABASE;
+const DB_USERNAME = process.env.DB_USERNAME;
+const DB_NAME = process.env.DB_NAME;
+const DB_NAME_TEST = process.env.DB_NAME_TEST;
+const DB_NAME_DEV = process.env.DB_NAME_DEV;
+const DB_PORT = process.env.DB_PORT;
+const DB_PASSWORD = process.env.DB_PASSWORD;
+const DB_HOST = process.env.DB_HOST;
 const SECRET_KEY = process.env.SECRET_KEY || "wisdomconnectsecretkey";
-console.log("SECRET_KEY loaded:", SECRET_KEY); // 🔍 debug
 
 // Frontend environment variables
-FRONTEND_URL = process.env.FRONTEND_URL;
+const FRONTEND_URL = process.env.FRONTEND_URL;
 
-// ✅ FIXED: Backend URL for production image uploads
-BACKEND_URL = process.env.BACKEND_URL;
+// Backend URL for production image uploads
+const BACKEND_URL = process.env.BACKEND_URL;
 
 // API base URL
-API_URL = "/api/v1";
+const API_URL = "/api/v1";
 // Cloudinary environment variables
-CLOUDINARY_NAME = process.env.CLOUDINARY_NAME;
-CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
-CLOUDINARY_API_SECRET = process.env.CLOUDINARY_SECRET_KEY;
-CLOUDINARY_FOLDER_NAME = process.env.CLOUDINARY_FOLDER_NAME;
-CLOUDINARY_URL = `cloudinary://${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}@dwrtusn1v`;
+const CLOUDINARY_NAME = process.env.CLOUDINARY_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_SECRET_KEY;
+const CLOUDINARY_FOLDER_NAME = process.env.CLOUDINARY_FOLDER_NAME;
+const CLOUDINARY_URL = `cloudinary://${CLOUDINARY_API_KEY}:${CLOUDINARY_API_SECRET}@dwrtusn1v`;
 
-// Brevo Email
-BREVO_API_KEY = process.env.BREVO_API_KEY;
-SMTP_SEVER = process.env.SMTP_SEVER;
-SMTP_PORT = process.env.SMTP_PORT;
-SMTP_EMAIL = process.env.SMTP_EMAIL;
-SMTP_PASSWORD = process.env.SMTP_PASSWORD;
+// Brevo / SMTP Email
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const SMTP_SERVER = process.env.SMTP_SERVER || process.env.SMTP_SEVER;
+const SMTP_PORT = process.env.SMTP_PORT;
+const SMTP_EMAIL = process.env.SMTP_EMAIL;
+const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
 
 // Email validation regex
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 // bcrypt salt rounds
-salt = 8;
+const salt = 8;
 
 // Standardized messages
 const messages = {
@@ -123,7 +122,7 @@ module.exports = {
     multer,
     SibApiV3Sdk,
     BREVO_API_KEY,
-    SMTP_SEVER,
+    SMTP_SERVER,
     SMTP_PORT,
     SMTP_EMAIL,
     SMTP_PASSWORD,

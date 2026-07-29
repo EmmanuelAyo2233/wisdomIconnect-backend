@@ -259,28 +259,26 @@
       if (!ok) {
         return res.status(400).json({ status: "fail", message: "Password incorrect" });
       }
-if (user.userType === "mentor") {
-  await Mentor.update(
-    { isOnline: true },
-    { where: { user_id: user.id } }   // match DB column exactly
-  );
 
-  const mentorCheck = await Mentor.findOne({ where: { user_id: user.id } });
-  console.log("Mentor isOnline from backend:", mentorCheck?.isOnline);
-}
+      if (user.accountStatus === "suspended" || user.accountStatus === "banned" || user.status === "banned") {
+        return res.status(403).json({ status: "fail", message: "Your account has been suspended or banned. Please contact support." });
+      }
 
+      if (user.userType === "mentor") {
+        await Mentor.update(
+          { isOnline: true },
+          { where: { user_id: user.id } }
+        );
+      }
 
-      // NOTE: Pending mentors CAN log in (dashboard access), but won’t appear in search/booking.
-      // We'll surface a banner hint via response.
       const tokenPayload = {
         id: user.id,
         email: user.email,
-        userType: user.userType,  // ✅ keep the same field as DB + restrictTo
+        userType: user.userType,
         status: user.status
       };
 
       const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
-      console.log("Token issued:", token);
 
 let banner = null; // <-- single source of truth
 
@@ -362,7 +360,9 @@ const logout = async (req, res) => {
     try {
       let idToken = "";
       if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
-        idToken = req.headers.authorization.split(" ")[1];
+        idToken = req.headers.authorization.split(" ")[1].trim();
+      } else if (req.cookies && (req.cookies.authToken || req.cookies.token)) {
+        idToken = req.cookies.authToken || req.cookies.token;
       }
 
       if (!idToken) {
