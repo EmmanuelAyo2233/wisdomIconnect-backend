@@ -4,9 +4,16 @@ const { User, Mentor, Mentee, Appointment, AdminLog, Payment, Report, Review, Me
 // --- Get all users
 exports.getAllUsers = async (req, res) => {
   try {
-    const users = await User.findAll({
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const offset = (page - 1) * limit;
+
+    const { count, rows: users } = await User.findAndCountAll({
       order: [["createdAt", "DESC"]],
+      limit,
+      offset,
     });
+
     const rows = users.map(u => ({
       id: u.id,
       firstName: u.name.split(' ')[0] || '',
@@ -16,7 +23,11 @@ exports.getAllUsers = async (req, res) => {
       isVerified: u.status === 'approved' || (u.userType === 'admin'),
       createdAt: u.createdAt
     }));
-    res.json({ users: rows });
+
+    res.json({
+      users: rows,
+      pagination: { total: count, page, limit, totalPages: Math.ceil(count / limit) }
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }

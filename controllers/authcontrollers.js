@@ -114,6 +114,7 @@
 
         // Create user with pending status (mentor verification)
         const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
         const newUser = await User.create({
           name: b.name,
           email: b.email,
@@ -121,6 +122,7 @@
           userType: "mentor",
           status: "pending", // pending approval
           verificationToken,
+          verificationExpires,
           isVerified: false,
         });
 
@@ -188,6 +190,7 @@
       if (fluentIn.length > 5) return res.status(400).json({ status: "fail", message: "Select up to 5 fluent languages" });
 
       const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+      const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
       const newUser = await User.create({
         name: b.name,
         email: b.email,
@@ -195,6 +198,7 @@
         userType: "mentee",
         status: "approved", // mentees auto-approved
         verificationToken,
+        verificationExpires,
         isVerified: false,
       });
 
@@ -370,7 +374,6 @@ const logout = async (req, res) => {
       }
 
       const tokenDetails = jwt.verify(idToken, SECRET_KEY);
-      console.log("AUTH DEBUG tokenDetails:", tokenDetails);
 
       const freshUser = await User.findOne({
         where: {
@@ -382,45 +385,25 @@ const logout = async (req, res) => {
         ],
         attributes: { exclude: ["password"] },
       });
-      console.log("AUTH DEBUG freshUser:", freshUser ? "FOUND" : "NOT FOUND");
 
       if (!freshUser) {
         return res.status(400).json({ status: "fail", message: "User no longer exists" });
       }
 
-req.user = freshUser;
+      req.user = freshUser;
+      req.user.mentorId = freshUser.mentor?.id || null;
+      req.user.menteeId = freshUser.mentee?.id || null;
 
-// Add virtual fields for notifications
-req.user.mentorId = freshUser.mentor?.id || null;
-req.user.menteeId = freshUser.mentee?.id || null;
-
-console.log("✅ Authenticated user:", {
-  id: freshUser.id,
-  email: freshUser.email,
-  userType: freshUser.userType,
-  status: freshUser.status,
-  mentorId: req.user.mentorId,
-  menteeId: req.user.menteeId,
-});
       next();
-    }catch (error) {
-  console.error("JWT verification error:", error); // 🔍 log full error
-  return res.status(401).json({
-    status: "fail",
-    message: "JWT: " + error.message, // send actual error message (optional)
-  });
-}
+    } catch (error) {
+      return res.status(401).json({ status: "fail", message: "Invalid or expired token" });
+    }
   };
 
   // Restrict access by role
- const restrictTo = (...userType) => {
+const restrictTo = (...userType) => {
   return (req, res, next) => {
-    console.log("🟢 restrictTo called");
-    console.log("Allowed types:", userType);
-    console.log("Current user from token:", req.user?.userType);
-
     if (!userType.includes(req.user.userType)) {
-      console.warn("❌ Forbidden access. User type mismatch.");
       return res.status(403).json({
         status: "fail",
         message: `You don't have permission as a ${req.user.userType}`,
@@ -607,7 +590,11 @@ console.log("✅ Authenticated user:", {
          return res.status(400).json({ status: "fail", message: "Invalid or expired OTP" });
       }
 
-      await user.update({ isVerified: true, verificationToken: null });
+      if (user.verificationExpires && new Date() > new Date(user.verificationExpires)) {
+         return res.status(400).json({ status: "fail", message: "Verification code has expired. Please request a new one." });
+      }
+
+      await user.update({ isVerified: true, verificationToken: null, verificationExpires: null });
 
       logActivity({
         type: "USER",
@@ -672,7 +659,8 @@ console.log("✅ Authenticated user:", {
       }
 
       const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
-      await user.update({ verificationToken });
+      const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
+      await user.update({ verificationToken, verificationExpires });
 
       const userResponse = user.get({ plain: true });
       delete userResponse.password;
