@@ -35,7 +35,8 @@ const { User, Appointment, Review } = require("../models");
 // Public stats for Landing Page
 router.get("/landing-stats", async (req, res) => {
     try {
-        const { Mentor, Sequelize } = require("../models");
+        const { Mentor } = require("../models");
+        const { Sequelize } = require("sequelize");
 
         const mentorsCount  = await User.count({ where: { userType: "mentor", status: "approved" } });
         const sessionsCount = await Appointment.count({ where: { status: "completed" } });
