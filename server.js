@@ -37,23 +37,34 @@ const callRoutes = require("./routes/callRoutes");
 const app = express();
 
 // --- Enhanced CORS Configuration ---
+const allowedOrigins = [
+    "http://127.0.0.1:5503",
+    "http://localhost:5503",
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "https://wisdom-iconnect.vercel.app",
+    "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
+    FRONTEND_URL,
+].filter(Boolean);
+
 const corsOptions = {
-    origin: [
-        "http://127.0.0.1:5503",
-        "http://localhost:5503",
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
-        "https://wisdom-iconnect.vercel.app",
-        "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
-        /\.vercel\.app$/, // Allows any Vercel preview branch
-        FRONTEND_URL,
-    ].filter(Boolean),
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, Render health checks)
+        if (!origin) return callback(null, true);
+        // Allow any Vercel preview/production deployment
+        if (/\.vercel\.app$/.test(origin)) return callback(null, true);
+        if (allowedOrigins.includes(origin)) return callback(null, true);
+        return callback(new Error(`CORS: Origin '${origin}' not allowed`));
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
 };
+
+// Handle OPTIONS preflight BEFORE helmet or any other middleware
+app.options("*", cors(corsOptions));
 app.use(cors(corsOptions));
 
 // --- Global Middleware ---
