@@ -508,7 +508,7 @@ const restrictTo = (...userType) => {
       const templates = require('../utils/emailTemplates');
       await emailService.sendEmail({
         to: user.email,
-        subject: 'Your WisdomIconnect Password Reset Code',
+        subject: 'Your Wisicom Password Reset Code',
         html: templates.forgotPassword(user.name, otp)
       });
 

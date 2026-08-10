@@ -21,14 +21,14 @@ const createBaseTemplate = (title, content) => `
 <body>
     <div class="container">
         <div class="header">
-            <h1>WisdomIconnect</h1>
+            <h1>Wisicom</h1>
         </div>
         <div class="content">
             ${content}
         </div>
         <div class="footer">
             <p>Empowering individuals through expert mentorship.</p>
-            <p>&copy; ${new Date().getFullYear()} WisdomIconnect. All rights reserved.</p>
+            <p>&copy; ${new Date().getFullYear()} Wisicom. All rights reserved.</p>
         </div>
     </div>
 </body>
@@ -40,7 +40,7 @@ module.exports = {
   emailVerification: (name, otp) => createBaseTemplate(
     'Verify your email',
     `<h2>Welcome, ${name}!</h2>
-     <p>We're thrilled to have you join WisdomIconnect. To get started, please verify your email address by entering the following 6-digit code:</p>
+     <p>We're thrilled to have you join Wisicom. To get started, please verify your email address by entering the following 6-digit code:</p>
      <div style="background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; border-radius: 8px; margin: 20px 0;">
         ${otp}
      </div>
@@ -51,7 +51,7 @@ module.exports = {
     'Reset your password',
     `<h2>Password Reset Request</h2>
      <p>Hi ${name},</p>
-     <p>We received a request to reset your WisdomIconnect password. Enter the 6-digit code below to create a new password:</p>
+     <p>We received a request to reset your Wisicom password. Enter the 6-digit code below to create a new password:</p>
      <div style="background-color: #fef3f2; border: 2px solid #b22222; padding: 20px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; border-radius: 12px; margin: 24px 0; color: #b22222;">
         ${otp}
      </div>
@@ -60,7 +60,7 @@ module.exports = {
   ),
 
   welcomeEmail: (name) => createBaseTemplate(
-    'Welcome to WisdomIconnect',
+    'Welcome to Wisicom',
     `<h2>Welcome to the community, ${name}!</h2>
      <p>Your account is fully set up. You can now start exploring world-class mentors or begin sharing your wisdom with others.</p>
      <a href="${process.env.FRONTEND_URL}/login" class="btn" style="color: #ffffff;">Sign In to Dashboard</a>`
@@ -85,7 +85,7 @@ module.exports = {
   messageRequest: (receiverName, senderName, messageUrl) => createBaseTemplate(
     'New Message Request',
     `<h2>Hello, ${receiverName}</h2>
-     <p><span class="strong">${senderName}</span> has sent you a new message request on WisdomIconnect.</p>
+     <p><span class="strong">${senderName}</span> has sent you a new message request on Wisicom.</p>
      <a href="${messageUrl}" class="btn" style="color: #ffffff;">View Request</a>`
   ),
 

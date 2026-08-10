@@ -595,10 +595,10 @@ exports.addPlaybookComment = async (req, res) => {
                             emailData: {
                                 to: targetUser.email,
                                 html: `<div style="font-family:sans-serif;color:#333;">
-                                         <h2>${parent_id ? "New Reply on WisdomIconnect" : "New Comment on WisdomIconnect"}</h2>
+                                         <h2>${parent_id ? "New Reply on Wisicom" : "New Comment on Wisicom"}</h2>
                                          <p><b>${req.user.name || 'Someone'}</b> ${parent_id ? 'replied to your comment' : `commented on your playbook "${playbook.title}"`}:</p>
                                          <blockquote style="border-left:4px solid #f59e0b;padding-left:10px;color:#555;">${content}</blockquote>
-                                         <p><a href="${process.env.FRONTEND_URL}/playbooks/${playbook.id}" style="color:#2563eb;font-weight:bold;">View on WisdomIconnect</a></p>
+                                         <p><a href="${process.env.FRONTEND_URL}/playbooks/${playbook.id}" style="color:#2563eb;font-weight:bold;">View on Wisicom</a></p>
                                        </div>`
                             }
                         });

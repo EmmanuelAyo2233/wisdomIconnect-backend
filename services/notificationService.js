@@ -37,7 +37,7 @@ class NotificationService {
       if (emailData && emailData.to) {
         await emailService.sendEmail({
           to: emailData.to,
-          subject: title || 'New Notification from WisdomIconnect',
+          subject: title || 'New Notification from Wisicom',
           html: emailData.html
         });
       }
@@ -70,7 +70,7 @@ class NotificationService {
       receiverId: receiverId,
       receiverType: userType,
       type: 'auth',
-      title: 'Welcome to WisdomIconnect!',
+      title: 'Welcome to Wisicom!',
       message: 'Your account has been successfully created. Explore the platform and connect with others!',
       emailData: {
         to: user.email,

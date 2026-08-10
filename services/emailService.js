@@ -8,7 +8,7 @@ class EmailService {
       try {
         const payload = {
           sender: {
-            name: "WisdomIconnect",
+            name: "Wisicom",
             email: process.env.SMTP_EMAIL || "wisdomiconnect@gmail.com"
           },
           to: [{ email: to }],
@@ -49,7 +49,7 @@ class EmailService {
         });
 
         await transporter.sendMail({
-          from: `"WisdomIconnect" <${smtpEmail}>`,
+          from: `"Wisicom" <${smtpEmail}>`,
           to: to,
           subject: subject,
           html: html

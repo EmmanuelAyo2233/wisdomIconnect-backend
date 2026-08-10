@@ -217,7 +217,7 @@ exports.reviewKyc = async (req, res) => {
                      <li>Create paid mentorship sessions</li>
                      <li>Withdraw your earnings</li>
                    </ul>
-                   <p>Thank you for verifying your identity on WisdomIconnect.</p>`
+                   <p>Thank you for verifying your identity on Wisicom.</p>`
           },
         }).catch(console.error);
       }

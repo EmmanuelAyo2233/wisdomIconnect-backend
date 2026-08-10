@@ -1,7 +1,7 @@
 const { db, Achievement } = require("./models");
 
 /**
- * Comprehensive achievement seed for WisdomIconnect.
+ * Comprehensive achievement seed for Wisicom.
  * 
  * MENTOR achievements:
  *   - Sessions:    1, 10, 25, 50, 100, 150, 250, 500
@@ -39,7 +39,7 @@ const achievements = [
     { title: "Top 100 Mentor", description: "Ranked in the Top 100 Mentors on the platform", icon: "📊", criteria_type: "mentor_leaderboard", criteria_threshold: 100, role: "mentor" },
     { title: "Top 50 Mentor", description: "Ranked in the Top 50 Mentors on the platform", icon: "📈", criteria_type: "mentor_leaderboard", criteria_threshold: 50, role: "mentor" },
     { title: "Top 10 Mentor", description: "Ranked in the Top 10 Mentors — elite status!", icon: "🏅", criteria_type: "mentor_leaderboard", criteria_threshold: 10, role: "mentor" },
-    { title: "Top 1 Mentor", description: "The #1 Mentor on WisdomIconnect!", icon: "🥇", criteria_type: "mentor_leaderboard", criteria_threshold: 1, role: "mentor" },
+    { title: "Top 1 Mentor", description: "The #1 Mentor on Wisicom!", icon: "🥇", criteria_type: "mentor_leaderboard", criteria_threshold: 1, role: "mentor" },
 
     // ═══════════════════════════════════════
     // MENTEE — Session Milestones
