@@ -669,7 +669,7 @@ exports.acceptAppointment = async (req, res) => {
     notificationService.sendBookingAccepted(
       menteeUser, 
       mentorUserObj, 
-      `Date: ${appointment.date}\nTime: ${appointment.startTime}`, 
+      `Date: ${appointment.date}\nTime: ${appointment.startTime}\nTopic: ${appointment.topic || 'Mentorship Session'}`, 
       appointment.meetingLink
     ).catch(console.error);
 

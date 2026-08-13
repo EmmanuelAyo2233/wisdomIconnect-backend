@@ -8,6 +8,94 @@ const templates = require('../utils/emailTemplates');
 class NotificationService {
 
   /**
+   * Helper to robustly resolve User object (with email) and profileId (Mentor.id or Mentee.id).
+   */
+  async resolveUserAndProfile(target, type) {
+    const User = require('../models/user');
+    const Mentor = require('../models/mentor');
+    const Mentee = require('../models/mentee');
+
+    let userRecord = null;
+    let profileId = null;
+
+    if (!target) return { user: null, profileId: null };
+
+    // If target is an object with email
+    if (target.email) {
+      userRecord = target;
+      if (type === 'mentor') {
+        const m = target.mentor || await Mentor.findOne({ where: { user_id: target.id } });
+        profileId = m ? m.id : target.id;
+      } else if (type === 'mentee') {
+        const me = target.mentee || await Mentee.findOne({ where: { user_id: target.id } });
+        profileId = me ? me.id : target.id;
+      } else {
+        profileId = target.id;
+      }
+      return { user: userRecord, profileId };
+    }
+
+    // If target is Mentor or Mentee instance (has user_id but no email directly attached)
+    if (target.user_id) {
+      profileId = target.id;
+      userRecord = await User.findByPk(target.user_id);
+      return { user: userRecord, profileId };
+    }
+
+    // If target is a raw ID (number or numeric string)
+    if (typeof target === 'number' || (typeof target === 'string' && !isNaN(target))) {
+      const numericId = Number(target);
+      if (type === 'mentor') {
+        const m = await Mentor.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        if (m && m.user) {
+          return { user: m.user, profileId: m.id };
+        }
+      } else if (type === 'mentee') {
+        const me = await Mentee.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        if (me && me.user) {
+          return { user: me.user, profileId: me.id };
+        }
+      }
+      // Fallback: try User directly
+      userRecord = await User.findByPk(numericId);
+      profileId = numericId;
+    }
+
+    return { user: userRecord, profileId };
+  }
+
+  /**
+   * Helper to parse string or object sessionDetails into topic & dateTime strings.
+   */
+  parseSessionDetails(sessionDetails) {
+    let topic = 'Mentorship Session';
+    let dateTime = '';
+
+    if (!sessionDetails) return { topic, dateTime };
+
+    if (typeof sessionDetails === 'object') {
+      topic = sessionDetails.topic || sessionDetails.sessionTitle || 'Mentorship Session';
+      dateTime = sessionDetails.dateTime || `${sessionDetails.date || ''} ${sessionDetails.startTime || ''}`.trim();
+    } else if (typeof sessionDetails === 'string') {
+      const lines = sessionDetails.split('\n');
+      let datePart = '', timePart = '';
+      lines.forEach(line => {
+        const lower = line.toLowerCase();
+        if (lower.startsWith('topic:')) topic = line.substring(line.indexOf(':') + 1).trim();
+        if (lower.startsWith('date:')) datePart = line.substring(line.indexOf(':') + 1).trim();
+        if (lower.startsWith('time:')) timePart = line.substring(line.indexOf(':') + 1).trim();
+      });
+      if (datePart || timePart) {
+        dateTime = `${datePart} ${timePart}`.trim();
+      } else {
+        dateTime = sessionDetails;
+      }
+    }
+
+    return { topic, dateTime };
+  }
+
+  /**
    * General method to create a notification and optionally send an email.
    */
   async sendNotification({ 
@@ -33,13 +121,15 @@ class NotificationService {
         isRead: false
       });
 
-      // 2. Send Email if emailData is provided
+      // 2. Send Email if emailData is provided and recipient has an email address
       if (emailData && emailData.to) {
         await emailService.sendEmail({
           to: emailData.to,
           subject: title || 'New Notification from Wisicom',
           html: emailData.html
         });
+      } else if (emailData) {
+        console.warn('⚠️ [sendNotification] emailData provided but recipient email ("to") is missing:', emailData);
       }
 
       return inAppNotif;
@@ -54,37 +144,38 @@ class NotificationService {
   // ==========================================
 
   async sendEmailVerification(user, otp) {
+    if (!user || !user.email) return;
     await emailService.sendEmail({
       to: user.email,
       subject: 'Verify your email address',
-      html: templates.emailVerification(user.firstName || user.name, otp)
+      html: templates.emailVerification(user.firstName || user.name || 'User', otp)
     });
   }
 
   async sendWelcomeNotification(user, userType) {
-    let receiverId = user.id; // fallback
-    if (userType === 'mentor' && user.mentor) receiverId = user.mentor.id;
-    if (userType === 'mentee' && user.mentee) receiverId = user.mentee.id;
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, userType);
+    if (!userRecord || !userRecord.email) return;
 
     await this.sendNotification({
-      receiverId: receiverId,
+      receiverId: profileId || userRecord.id,
       receiverType: userType,
       type: 'auth',
       title: 'Welcome to Wisicom!',
       message: 'Your account has been successfully created. Explore the platform and connect with others!',
       emailData: {
-        to: user.email,
-        html: templates.welcomeEmail(user.firstName || user.name)
+        to: userRecord.email,
+        html: templates.welcomeEmail(userRecord.firstName || userRecord.name || 'User')
       }
     });
   }
 
   async sendPasswordReset(user, token) {
+    if (!user || !user.email) return;
     const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
     await emailService.sendEmail({
       to: user.email,
       subject: 'Reset your password',
-      html: templates.passwordReset(user.firstName || user.name, url)
+      html: templates.passwordReset(user.firstName || user.name || 'User', url)
     });
   }
 
@@ -93,71 +184,57 @@ class NotificationService {
   // ==========================================
 
   async sendMessageRequest(sender, receiver, receiverType) {
-    const messageUrl = `${process.env.FRONTEND_URL}/${receiverType}/messages`;
-    const Mentor = require('../models/mentor');
-    const Mentee = require('../models/mentee');
+    const { user: senderUser, profileId: senderProfileId } = await this.resolveUserAndProfile(sender, receiverType === 'mentor' ? 'mentee' : 'mentor');
+    const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, receiverType);
     
-    let rId = receiver.id;
-    let sId = sender.id;
-    
-    if (receiverType === 'mentor') {
-       const m = await Mentor.findOne({ where: { user_id: receiver.id }});
-       if (m) rId = m.id;
-       const me = await Mentee.findOne({ where: { user_id: sender.id }});
-       if (me) sId = me.id;
-    } else {
-       const me = await Mentee.findOne({ where: { user_id: receiver.id }});
-       if (me) rId = me.id;
-       const m = await Mentor.findOne({ where: { user_id: sender.id }});
-       if (m) sId = m.id;
+    if (!receiverUser || !receiverUser.email) {
+      console.error('❌ sendMessageRequest failed: Receiver email not found');
+      return;
     }
 
+    const messageUrl = `${process.env.FRONTEND_URL}/${receiverType}/messages`;
+    const senderName = senderUser ? (senderUser.firstName || senderUser.name) : 'A User';
+    const receiverName = receiverUser.firstName || receiverUser.name || 'User';
+
     await this.sendNotification({
-      receiverId: rId,
+      receiverId: receiverProfileId || receiverUser.id,
       receiverType,
-      senderId: sId,
+      senderId: senderProfileId || (senderUser ? senderUser.id : null),
       type: 'message_request',
-      title: 'New Message Request',
-      message: `You have a new message request from ${sender.firstName || sender.name}.`,
+      title: 'New Connection Request',
+      message: `You have a new connection request from ${senderName}.`,
       link: `/${receiverType}/messages`,
       emailData: {
-        to: receiver.email,
-        html: templates.messageRequest(receiver.firstName || receiver.name, sender.firstName || sender.name, messageUrl)
+        to: receiverUser.email,
+        html: templates.messageRequest(receiverName, senderName, messageUrl)
       }
     });
   }
 
   async sendMessageRequestAccepted(sender, receiver, senderType) {
-    const chatUrl = `${process.env.FRONTEND_URL}/${senderType}/messages`;
-    const Mentor = require('../models/mentor');
-    const Mentee = require('../models/mentee');
-    
-    let rId = sender.id; // Sender of original request becomes receiver of acceptance
-    let sId = receiver.id;
-    
-    if (senderType === 'mentor') {
-       const m = await Mentor.findOne({ where: { user_id: sender.id }});
-       if (m) rId = m.id;
-       const me = await Mentee.findOne({ where: { user_id: receiver.id }});
-       if (me) sId = me.id;
-    } else {
-       const me = await Mentee.findOne({ where: { user_id: sender.id }});
-       if (me) rId = me.id;
-       const m = await Mentor.findOne({ where: { user_id: receiver.id }});
-       if (m) sId = m.id;
+    const { user: senderUser, profileId: senderProfileId } = await this.resolveUserAndProfile(sender, senderType);
+    const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, senderType === 'mentor' ? 'mentee' : 'mentor');
+
+    if (!senderUser || !senderUser.email) {
+      console.error('❌ sendMessageRequestAccepted failed: Sender email not found');
+      return;
     }
 
+    const chatUrl = `${process.env.FRONTEND_URL}/${senderType}/messages`;
+    const senderName = senderUser.firstName || senderUser.name || 'User';
+    const receiverName = receiverUser ? (receiverUser.firstName || receiverUser.name) : 'User';
+
     await this.sendNotification({
-      receiverId: rId,
+      receiverId: senderProfileId || senderUser.id,
       receiverType: senderType,
-      senderId: sId,
+      senderId: receiverProfileId || (receiverUser ? receiverUser.id : null),
       type: 'message_request_response',
-      title: 'Message Request Accepted',
-      message: `${receiver.firstName || receiver.name} has accepted your message request.`,
+      title: 'Connection Request Accepted',
+      message: `${receiverName} has accepted your connection request.`,
       link: `/${senderType}/messages`,
       emailData: {
-        to: sender.email,
-        html: templates.messageRequestAccepted(sender.firstName || sender.name, receiver.firstName || receiver.name, chatUrl)
+        to: senderUser.email,
+        html: templates.messageRequestAccepted(senderName, receiverName, chatUrl)
       }
     });
   }
@@ -167,67 +244,61 @@ class NotificationService {
   // ==========================================
 
   async sendBookingRequest(mentee, mentor, sessionDetails) {
+    const { user: menteeUser, profileId: menteeProfileId } = await this.resolveUserAndProfile(mentee, 'mentee');
+    const { user: mentorUser, profileId: mentorProfileId } = await this.resolveUserAndProfile(mentor, 'mentor');
+
+    if (!mentorUser || !mentorUser.email) {
+      console.error('❌ sendBookingRequest failed: Mentor email not found', { mentor, mentorUser });
+      return;
+    }
+
     const dashboardUrl = `${process.env.FRONTEND_URL}/mentor/dashboard`;
-    const Mentor = require('../models/mentor');
-    const Mentee = require('../models/mentee');
-    
-    let rId = mentor.id;
-    let sId = mentee.id;
-    const m = await Mentor.findOne({ where: { user_id: mentor.id }});
-    if (m) rId = m.id;
-    const me = await Mentee.findOne({ where: { user_id: mentee.id }});
-    if (me) sId = me.id;
+    const menteeName = menteeUser ? (menteeUser.firstName || menteeUser.name) : 'A Mentee';
+    const mentorName = mentorUser.firstName || mentorUser.name || 'Mentor';
+
+    const { topic, dateTime } = this.parseSessionDetails(sessionDetails);
 
     await this.sendNotification({
-      receiverId: rId,
+      receiverId: mentorProfileId || mentorUser.id,
       receiverType: 'mentor',
-      senderId: sId,
+      senderId: menteeProfileId || (menteeUser ? menteeUser.id : null),
       type: 'booking',
       title: 'New Booking Request',
-      message: `${mentee.firstName || mentee.name} has requested a session with you.`,
+      message: `${menteeName} has requested a mentorship session with you.`,
       link: '/mentor/bookings',
       emailData: {
-        to: mentor.email,
-        html: templates.bookingRequestSent(
-          mentor.firstName || mentor.name,
-          mentee.firstName || mentee.name,
-          typeof sessionDetails === 'object' ? (sessionDetails.topic || 'Mentorship Session') : (sessionDetails || 'Mentorship Session'),
-          typeof sessionDetails === 'object' ? (sessionDetails.dateTime || '') : '',
-          dashboardUrl
-        )
+        to: mentorUser.email,
+        html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl)
       }
     });
   }
 
   async sendBookingAccepted(mentee, mentor, sessionDetails, meetingLink) {
+    const { user: menteeUser, profileId: menteeProfileId } = await this.resolveUserAndProfile(mentee, 'mentee');
+    const { user: mentorUser, profileId: mentorProfileId } = await this.resolveUserAndProfile(mentor, 'mentor');
+
+    if (!menteeUser || !menteeUser.email) {
+      console.error('❌ sendBookingAccepted failed: Mentee email not found', { mentee, menteeUser });
+      return;
+    }
+
     const joinUrl = `${process.env.FRONTEND_URL}${meetingLink || '/mentee/sessions'}`;
-    const Mentor = require('../models/mentor');
-    const Mentee = require('../models/mentee');
-    
-    let rId = mentee.id;
-    let sId = mentor.id;
-    const me = await Mentee.findOne({ where: { user_id: mentee.id }});
-    if (me) rId = me.id;
-    const m = await Mentor.findOne({ where: { user_id: mentor.id }});
-    if (m) sId = m.id;
+    const menteeName = menteeUser.firstName || menteeUser.name || 'Mentee';
+    const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Your Mentor';
+
+    const { topic, dateTime } = this.parseSessionDetails(sessionDetails);
 
     await this.sendNotification({
-      receiverId: rId,
+      receiverId: menteeProfileId || menteeUser.id,
       receiverType: 'mentee',
-      senderId: sId,
+      senderId: mentorProfileId || (mentorUser ? mentorUser.id : null),
       type: 'booking',
-      title: 'Booking Accepted',
-      message: `${mentor.firstName || mentor.name} has accepted your session request.`,
+      title: 'Booking Accepted!',
+      message: `${mentorName} has accepted your session request.`,
       link: '/mentee/bookings',
       emailData: {
-        to: mentee.email,
-        html: templates.bookingAccepted(
-          mentee.firstName || mentee.name,
-          mentor.firstName || mentor.name,
-          typeof sessionDetails === 'object' ? (sessionDetails.topic || 'Mentorship Session') : (sessionDetails || 'Mentorship Session'),
-          typeof sessionDetails === 'object' ? (sessionDetails.dateTime || '') : '',
-          joinUrl
-        )
+        to: menteeUser.email,
+        html: templates.bookingAccepted(menteeName, mentorName, topic, dateTime, joinUrl)
       }
     });
   }
@@ -237,43 +308,52 @@ class NotificationService {
   // ==========================================
 
   async sendPaymentSuccess(user, userType, amount, purpose) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, userType);
+    if (!userRecord || !userRecord.email) return;
+
     await this.sendNotification({
-      receiverId: user.id,
+      receiverId: profileId || userRecord.id,
       receiverType: userType,
       type: 'payment',
       title: 'Payment Successful',
       message: `Your payment of ${amount} for ${purpose} was successful.`,
       emailData: {
-        to: user.email,
-        html: templates.paymentSuccess(user.firstName || user.name, amount, purpose)
+        to: userRecord.email,
+        html: templates.paymentSuccess(userRecord.firstName || userRecord.name || 'User', amount, purpose)
       }
     });
   }
 
   async sendWithdrawalRequested(mentor, amount) {
+    const { user: mentorUser, profileId } = await this.resolveUserAndProfile(mentor, 'mentor');
+    if (!mentorUser || !mentorUser.email) return;
+
     await this.sendNotification({
-      receiverId: mentor.id,
+      receiverId: profileId || mentorUser.id,
       receiverType: 'mentor',
       type: 'payment',
       title: 'Withdrawal Request Received',
       message: `Your withdrawal request of ${amount} has been received and is being processed. You'll be notified once it's complete.`,
       emailData: {
-        to: mentor.email,
-        html: templates.withdrawalRequested(mentor.firstName || mentor.name, amount)
+        to: mentorUser.email,
+        html: templates.withdrawalRequested(mentorUser.firstName || mentorUser.name || 'Mentor', amount)
       }
     });
   }
 
   async sendPayoutProcessed(mentor, amount) {
+    const { user: mentorUser, profileId } = await this.resolveUserAndProfile(mentor, 'mentor');
+    if (!mentorUser || !mentorUser.email) return;
+
     await this.sendNotification({
-      receiverId: mentor.id,
+      receiverId: profileId || mentorUser.id,
       receiverType: 'mentor',
       type: 'payment',
       title: 'Payout Transferred Successfully',
       message: `Your payout of ${amount} has been approved and transferred to your bank account.`,
       emailData: {
-        to: mentor.email,
-        html: templates.payoutProcessed(mentor.firstName || mentor.name, amount)
+        to: mentorUser.email,
+        html: templates.payoutProcessed(mentorUser.firstName || mentorUser.name || 'Mentor', amount)
       }
     });
   }
@@ -283,49 +363,58 @@ class NotificationService {
   // ==========================================
 
   async sendSessionReminder24h(user, userType, otherPersonName, sessionTitle, dateStr, timeStr, meetingId) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, userType);
+    if (!userRecord || !userRecord.email) return;
+
     const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
     await this.sendNotification({
-      receiverId: user.id,
+      receiverId: profileId || userRecord.id,
       receiverType: userType,
       type: 'booking',
       title: 'Call Reminder: Tomorrow',
       message: `Reminder: Your mentorship call with ${otherPersonName} is scheduled for tomorrow at ${timeStr}.`,
       link: `/call/${meetingId}`,
       emailData: {
-        to: user.email,
-        html: templates.reminder24h(user.firstName || user.name || 'User', otherPersonName, sessionTitle, dateStr, timeStr, joinUrl)
+        to: userRecord.email,
+        html: templates.reminder24h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, dateStr, timeStr, joinUrl)
       }
     });
   }
 
   async sendSessionReminder1h(user, userType, otherPersonName, sessionTitle, timeStr, meetingId) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, userType);
+    if (!userRecord || !userRecord.email) return;
+
     const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
     await this.sendNotification({
-      receiverId: user.id,
+      receiverId: profileId || userRecord.id,
       receiverType: userType,
       type: 'booking',
       title: 'Call Starts in 1 Hour!',
       message: `Your mentorship call with ${otherPersonName} starts in 1 hour (${timeStr}).`,
       link: `/call/${meetingId}`,
       emailData: {
-        to: user.email,
-        html: templates.reminder1h(user.firstName || user.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
+        to: userRecord.email,
+        html: templates.reminder1h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
       }
     });
   }
 
   async sendSessionReminder10m(user, userType, otherPersonName, sessionTitle, timeStr, meetingId) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, userType);
+    if (!userRecord || !userRecord.email) return;
+
     const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
     await this.sendNotification({
-      receiverId: user.id,
+      receiverId: profileId || userRecord.id,
       receiverType: userType,
       type: 'booking',
       title: 'Urgent: Call Starts in 10 Minutes!',
       message: `Your mentorship call with ${otherPersonName} is starting in 10 minutes! Click to join.`,
       link: `/call/${meetingId}`,
       emailData: {
-        to: user.email,
-        html: templates.reminder10m(user.firstName || user.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
+        to: userRecord.email,
+        html: templates.reminder10m(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
       }
     });
   }
