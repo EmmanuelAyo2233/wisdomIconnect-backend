@@ -188,7 +188,13 @@ class NotificationService {
       link: '/mentor/bookings',
       emailData: {
         to: mentor.email,
-        html: templates.bookingRequestSent(mentor.firstName || mentor.name, mentee.firstName || mentee.name, sessionDetails, dashboardUrl)
+        html: templates.bookingRequestSent(
+          mentor.firstName || mentor.name,
+          mentee.firstName || mentee.name,
+          typeof sessionDetails === 'object' ? (sessionDetails.topic || 'Mentorship Session') : (sessionDetails || 'Mentorship Session'),
+          typeof sessionDetails === 'object' ? (sessionDetails.dateTime || '') : '',
+          dashboardUrl
+        )
       }
     });
   }
@@ -215,7 +221,13 @@ class NotificationService {
       link: '/mentee/bookings',
       emailData: {
         to: mentee.email,
-        html: templates.bookingAccepted(mentee.firstName || mentee.name, mentor.firstName || mentor.name, sessionDetails, joinUrl)
+        html: templates.bookingAccepted(
+          mentee.firstName || mentee.name,
+          mentor.firstName || mentor.name,
+          typeof sessionDetails === 'object' ? (sessionDetails.topic || 'Mentorship Session') : (sessionDetails || 'Mentorship Session'),
+          typeof sessionDetails === 'object' ? (sessionDetails.dateTime || '') : '',
+          joinUrl
+        )
       }
     });
   }
@@ -248,6 +260,58 @@ class NotificationService {
       emailData: {
         to: mentor.email,
         html: templates.payoutProcessed(mentor.firstName || mentor.name, amount)
+      }
+    });
+  }
+
+  // ==========================================
+  // SESSION CALL REMINDERS (1 Day, 1 Hour, 10 Mins)
+  // ==========================================
+
+  async sendSessionReminder24h(user, userType, otherPersonName, sessionTitle, dateStr, timeStr, meetingId) {
+    const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
+    await this.sendNotification({
+      receiverId: user.id,
+      receiverType: userType,
+      type: 'booking',
+      title: 'Call Reminder: Tomorrow',
+      message: `Reminder: Your mentorship call with ${otherPersonName} is scheduled for tomorrow at ${timeStr}.`,
+      link: `/call/${meetingId}`,
+      emailData: {
+        to: user.email,
+        html: templates.reminder24h(user.firstName || user.name || 'User', otherPersonName, sessionTitle, dateStr, timeStr, joinUrl)
+      }
+    });
+  }
+
+  async sendSessionReminder1h(user, userType, otherPersonName, sessionTitle, timeStr, meetingId) {
+    const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
+    await this.sendNotification({
+      receiverId: user.id,
+      receiverType: userType,
+      type: 'booking',
+      title: 'Call Starts in 1 Hour!',
+      message: `Your mentorship call with ${otherPersonName} starts in 1 hour (${timeStr}).`,
+      link: `/call/${meetingId}`,
+      emailData: {
+        to: user.email,
+        html: templates.reminder1h(user.firstName || user.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
+      }
+    });
+  }
+
+  async sendSessionReminder10m(user, userType, otherPersonName, sessionTitle, timeStr, meetingId) {
+    const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/call/${meetingId}`;
+    await this.sendNotification({
+      receiverId: user.id,
+      receiverType: userType,
+      type: 'booking',
+      title: 'Urgent: Call Starts in 10 Minutes!',
+      message: `Your mentorship call with ${otherPersonName} is starting in 10 minutes! Click to join.`,
+      link: `/call/${meetingId}`,
+      emailData: {
+        to: user.email,
+        html: templates.reminder10m(user.firstName || user.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
       }
     });
   }

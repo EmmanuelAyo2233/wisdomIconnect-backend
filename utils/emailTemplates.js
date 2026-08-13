@@ -1,34 +1,52 @@
-const createBaseTemplate = (title, content) => `
+const createBaseTemplate = (title, preheader, content) => `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title}</title>
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #f3f4f6; margin: 0; padding: 0; }
-        .container { max-w: 600px; margin: 40px auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05); }
-        .header { background-color: #1e3a8a; padding: 24px; text-align: center; }
-        .header h1 { color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; }
-        .content { padding: 32px; color: #374151; line-height: 1.6; }
-        .content h2 { color: #111827; font-size: 20px; margin-top: 0; }
-        .btn { display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; margin-top: 20px; }
-        .footer { background-color: #f9fafb; padding: 24px; text-align: center; color: #6b7280; font-size: 14px; border-top: 1px solid #e5e7eb; }
-        .details-box { background-color: #f3f4f6; border-radius: 6px; padding: 16px; margin: 20px 0; }
-        .details-box p { margin: 8px 0; }
-        .strong { font-weight: 600; color: #111827; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f8; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; }
+        .wrapper { width: 100%; background-color: #f4f6f8; padding: 32px 16px; box-sizing: border-box; }
+        .container { max-width: 580px; margin: 0 auto; background-color: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05); border: 1px solid #e5e7eb; }
+        .header { background: linear-gradient(135deg, #b22222 0%, #8b0000 100%); padding: 32px 24px; text-align: center; }
+        .header-logo { color: #ffffff; font-size: 26px; font-weight: 900; letter-spacing: -0.5px; text-decoration: none; display: inline-block; }
+        .header-subtitle { color: rgba(255, 255, 255, 0.8); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px; }
+        .content { padding: 36px 32px; color: #374151; font-size: 15px; line-height: 1.65; }
+        .content h2 { color: #111827; font-size: 22px; font-weight: 800; margin: 0 0 16px 0; letter-spacing: -0.3px; }
+        .content p { margin: 0 0 16px 0; color: #4b5563; }
+        .badge { display: inline-block; padding: 4px 12px; background-color: rgba(178, 34, 34, 0.08); color: #b22222; border: 1px solid rgba(178, 34, 34, 0.2); border-radius: 9999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 16px; }
+        .badge-urgent { background-color: #fef2f2; color: #dc2626; border-color: #fecaca; }
+        .badge-success { background-color: #ecfdf5; color: #059669; border-color: #a7f3d0; }
+        .btn-container { text-align: center; margin: 28px 0 16px 0; }
+        .btn { display: inline-block; padding: 14px 32px; background-color: #b22222; color: #ffffff !important; text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 14px; box-shadow: 0 4px 12px rgba(178, 34, 34, 0.25); transition: all 0.2s ease; }
+        .btn:hover { background-color: #8b0000; }
+        .card { background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin: 20px 0; }
+        .card-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #edf2f7; font-size: 14px; }
+        .card-row:last-child { border-bottom: none; }
+        .card-label { color: #64748b; font-weight: 600; }
+        .card-value { color: #0f172a; font-weight: 700; text-align: right; }
+        .otp-box { background: linear-gradient(135deg, #fef2f2 0%, #fff5f5 100%); border: 2px dashed #b22222; padding: 24px; text-align: center; border-radius: 16px; margin: 24px 0; }
+        .otp-code { font-size: 38px; font-weight: 900; letter-spacing: 10px; color: #b22222; font-mono: inherit; }
+        .footer { background-color: #f9fafb; padding: 24px 32px; text-align: center; color: #9ca3af; font-size: 12px; border-top: 1px solid #f3f4f6; }
+        .footer p { margin: 4px 0; }
+        .footer a { color: #b22222; text-decoration: none; font-weight: 600; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Wisicom</h1>
-        </div>
-        <div class="content">
-            ${content}
-        </div>
-        <div class="footer">
-            <p>Empowering individuals through expert mentorship.</p>
-            <p>&copy; ${new Date().getFullYear()} Wisicom. All rights reserved.</p>
+    <div class="wrapper">
+        <div class="container">
+            <div class="header">
+                <a href="${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}" class="header-logo">Wisicom</a>
+                <div class="header-subtitle">Connecting Wisdom & Ambition</div>
+            </div>
+            <div class="content">
+                ${content}
+            </div>
+            <div class="footer">
+                <p>&copy; ${new Date().getFullYear()} Wisicom. Connecting generations through mentorship.</p>
+                <p>If you have any questions, reach out to our team at <a href="mailto:support@wisdomconnect.com">support@wisdomconnect.com</a></p>
+            </div>
         </div>
     </div>
 </body>
@@ -36,151 +54,325 @@ const createBaseTemplate = (title, content) => `
 `;
 
 module.exports = {
-  // Auth
+
+  // 1. Email Verification
   emailVerification: (name, otp) => createBaseTemplate(
-    'Verify your email',
-    `<h2>Welcome, ${name}!</h2>
-     <p>We're thrilled to have you join Wisicom. To get started, please verify your email address by entering the following 6-digit code:</p>
-     <div style="background-color: #f3f4f6; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; letter-spacing: 5px; border-radius: 8px; margin: 20px 0;">
-        ${otp}
+    'Verify Your Wisicom Email',
+    'Enter your verification code to complete your signup.',
+    `<div class="badge">Security Code</div>
+     <h2>Welcome to Wisicom, ${name}!</h2>
+     <p>Thank you for creating an account with Wisicom. To complete your registration and secure your profile, please verify your email address using the verification code below:</p>
+     
+     <div class="otp-box">
+        <div class="otp-code">${otp}</div>
      </div>
-     <p>This code will expire in 15 minutes. If you did not request this, please ignore this email.</p>`
+
+     <p style="font-size: 13px; color: #6b7280; text-align: center;">⏱️ This verification code is valid for <strong>15 minutes</strong>.</p>
+     <p style="font-size: 13px; color: #9ca3af;">If you did not sign up for a Wisicom account, you can safely ignore this email.</p>`
   ),
 
+  // 2. Forgot Password OTP
   forgotPassword: (name, otp) => createBaseTemplate(
-    'Reset your password',
-    `<h2>Password Reset Request</h2>
-     <p>Hi ${name},</p>
-     <p>We received a request to reset your Wisicom password. Enter the 6-digit code below to create a new password:</p>
-     <div style="background-color: #fef3f2; border: 2px solid #b22222; padding: 20px; text-align: center; font-size: 36px; font-weight: bold; letter-spacing: 8px; border-radius: 12px; margin: 24px 0; color: #b22222;">
-        ${otp}
+    'Reset Your Password',
+    'Use this authorization code to reset your account password.',
+    `<div class="badge badge-urgent">Password Reset</div>
+     <h2>Hello, ${name}</h2>
+     <p>We received a request to reset the password for your Wisicom account. Use the secure authorization code below to establish a new password:</p>
+
+     <div class="otp-box">
+        <div class="otp-code">${otp}</div>
      </div>
-     <p style="color: #6b7280; font-size: 14px;">⏱️ This code expires in <strong>15 minutes</strong>.</p>
-     <p style="color: #6b7280; font-size: 14px;">If you did not request a password reset, please ignore this email — your account is safe.</p>`
+
+     <p style="font-size: 13px; color: #6b7280; text-align: center;">⏱️ This security code will expire in <strong>15 minutes</strong>.</p>
+     <p style="font-size: 13px; color: #9ca3af;">If you did not initiate this request, please change your password immediately or contact our support team to safeguard your account.</p>`
   ),
 
+  // 3. Welcome Email
   welcomeEmail: (name) => createBaseTemplate(
     'Welcome to Wisicom',
-    `<h2>Welcome to the community, ${name}!</h2>
-     <p>Your account is fully set up. You can now start exploring world-class mentors or begin sharing your wisdom with others.</p>
-     <a href="${process.env.FRONTEND_URL}/login" class="btn" style="color: #ffffff;">Sign In to Dashboard</a>`
+    'Your mentorship journey begins now.',
+    `<div class="badge badge-success">Welcome</div>
+     <h2>Glad to have you with us, ${name}!</h2>
+     <p>Your Wisicom account is now active and ready. You are part of a global community connecting ambitious learners with seasoned professionals.</p>
+     <p>Whether you are seeking specialized guidance or ready to empower others with your expertise, your journey starts right here.</p>
+
+     <div class="btn-container">
+        <a href="${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/login" class="btn">Explore Your Dashboard</a>
+     </div>`
   ),
 
+  // 4. Password Reset Link
   passwordReset: (name, resetUrl) => createBaseTemplate(
-    'Reset your password',
-    `<h2>Hello, ${name}</h2>
-     <p>We received a request to reset your password. If you didn't make this request, you can safely ignore this email.</p>
-     <p>To reset your password, click the button below:</p>
-     <a href="${resetUrl}" class="btn" style="color: #ffffff;">Reset Password</a>`
+    'Reset Your Password',
+    'Click the secure link to update your account password.',
+    `<div class="badge badge-urgent">Security</div>
+     <h2>Hello, ${name}</h2>
+     <p>We received a request to reset your password. Click the button below to safely create a new password for your account:</p>
+
+     <div class="btn-container">
+        <a href="${resetUrl}" class="btn">Reset My Password</a>
+     </div>
+
+     <p style="font-size: 13px; color: #9ca3af;">If you did not request a password reset, no action is required — your account remains completely secure.</p>`
   ),
 
+  // 5. Password Changed Confirmation
   passwordChanged: (name) => createBaseTemplate(
-    'Password Changed Successfully',
-    `<h2>Hello, ${name}</h2>
-     <p>Your password has been successfully changed.</p>
-     <p>If you did not perform this action, please contact support immediately to secure your account.</p>`
+    'Password Updated',
+    'Your Wisicom account password was successfully updated.',
+    `<div class="badge badge-success">Security Update</div>
+     <h2>Password Updated Successfully</h2>
+     <p>Hello ${name},</p>
+     <p>This is confirmation that the password for your Wisicom account was updated recently.</p>
+     <p style="font-size: 13px; color: #dc2626;">If you did not make this change, please contact customer support immediately to secure your account.</p>`
   ),
 
-  // Messaging
+  // 6. Message Request Sent
   messageRequest: (receiverName, senderName, messageUrl) => createBaseTemplate(
-    'New Message Request',
-    `<h2>Hello, ${receiverName}</h2>
-     <p><span class="strong">${senderName}</span> has sent you a new message request on Wisicom.</p>
-     <a href="${messageUrl}" class="btn" style="color: #ffffff;">View Request</a>`
+    'New Connection Request',
+    `${senderName} wants to connect with you on Wisicom.`,
+    `<div class="badge">New Connection</div>
+     <h2>Hello, ${receiverName}</h2>
+     <p><strong>${senderName}</strong> has sent you a connection request on Wisicom.</p>
+     <p>Building meaningful relationships is at the core of mentorship. Review their profile and message request to respond.</p>
+
+     <div class="btn-container">
+        <a href="${messageUrl}" class="btn">View Connection Request</a>
+     </div>`
   ),
 
+  // 7. Message Request Accepted
   messageRequestAccepted: (senderName, receiverName, chatUrl) => createBaseTemplate(
-    'Message Request Accepted',
-    `<h2>Hello, ${senderName}</h2>
-     <p>Great news! <span class="strong">${receiverName}</span> has accepted your message request.</p>
-     <p>You can now chat with them directly.</p>
-     <a href="${chatUrl}" class="btn" style="color: #ffffff;">Go to Messages</a>`
+    'Connection Request Accepted',
+    `${receiverName} accepted your connection request!`,
+    `<div class="badge badge-success">Connection Established</div>
+     <h2>Great news, ${senderName}!</h2>
+     <p><strong>${receiverName}</strong> has accepted your connection request. You can now exchange direct messages and collaborate together.</p>
+
+     <div class="btn-container">
+        <a href="${chatUrl}" class="btn">Start Conversation</a>
+     </div>`
   ),
 
+  // 8. Message Request Declined
   messageRequestDeclined: (senderName, receiverName) => createBaseTemplate(
-    'Message Request Declined',
-    `<h2>Hello, ${senderName}</h2>
-     <p>Unfortunately, <span class="strong">${receiverName}</span> has declined your message request at this time.</p>
-     <p>Don't worry, there are plenty of other experts and learners on the platform!</p>`
+    'Connection Request Update',
+    'Update regarding your connection request on Wisicom.',
+    `<div class="badge">Update</div>
+     <h2>Hello, ${senderName}</h2>
+     <p><strong>${receiverName}</strong> is currently unavailable to accept your connection request at this time.</p>
+     <p>Don't be discouraged — there are many incredible mentors and learners eager to connect on Wisicom!</p>`
   ),
 
-  // Booking
-  bookingRequestSent: (mentorName, menteeName, sessionDetails, dashboardUrl) => createBaseTemplate(
-    'New Booking Request',
-    `<h2>Hello, ${mentorName}</h2>
-     <p><span class="strong">${menteeName}</span> has requested a new mentorship session with you.</p>
-     <div class="details-box">
-        ${sessionDetails}
+  // 9. Booking Request Sent (to Mentor)
+  bookingRequestSent: (mentorName, menteeName, sessionTitle, dateTime, dashboardUrl) => createBaseTemplate(
+    'New Booking Request Received',
+    `${menteeName} has requested a mentorship session with you.`,
+    `<div class="badge">New Session Request</div>
+     <h2>Hello, ${mentorName}</h2>
+     <p><strong>${menteeName}</strong> has requested a mentorship session with you on Wisicom.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Mentee:</span>
+            <span class="card-value">${menteeName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Topic / Session:</span>
+            <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Date & Time:</span>
+            <span class="card-value">${dateTime}</span>
+        </div>
      </div>
-     <a href="${dashboardUrl}" class="btn" style="color: #ffffff;">Review Booking</a>`
+
+     <p>Please review and respond to this request from your dashboard to confirm your availability.</p>
+
+     <div class="btn-container">
+        <a href="${dashboardUrl}" class="btn">Review Request</a>
+     </div>`
   ),
 
-  bookingAccepted: (menteeName, mentorName, sessionDetails, joinUrl) => createBaseTemplate(
-    'Booking Accepted',
-    `<h2>Hello, ${menteeName}</h2>
-     <p>Great news! <span class="strong">${mentorName}</span> has accepted your booking request.</p>
-     <div class="details-box">
-        ${sessionDetails}
+  // 10. Booking Accepted (to Mentee)
+  bookingAccepted: (menteeName, mentorName, sessionTitle, dateTime, joinUrl) => createBaseTemplate(
+    'Session Confirmed!',
+    `Your session with ${mentorName} is confirmed.`,
+    `<div class="badge badge-success">Booking Confirmed</div>
+     <h2>Your session is set, ${menteeName}!</h2>
+     <p>Great news — <strong>${mentorName}</strong> has accepted your booking request. Here are your session details:</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Mentor:</span>
+            <span class="card-value">${mentorName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Session Topic:</span>
+            <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Date & Time:</span>
+            <span class="card-value">${dateTime}</span>
+        </div>
      </div>
-     <a href="${joinUrl}" class="btn" style="color: #ffffff;">View Session Details</a>`
+
+     <div class="btn-container">
+        <a href="${joinUrl}" class="btn">View Session Details</a>
+     </div>`
   ),
 
+  // 11. Booking Declined (to Mentee)
   bookingDeclined: (menteeName, mentorName, reason) => createBaseTemplate(
-    'Booking Declined',
-    `<h2>Hello, ${menteeName}</h2>
-     <p>Unfortunately, <span class="strong">${mentorName}</span> is unable to accept your booking request right now.</p>
-     ${reason ? `<p><span class="strong">Reason:</span> ${reason}</p>` : ''}
-     <p>Your payment (if any) will be fully refunded.</p>`
+    'Session Booking Update',
+    `Update regarding your booking request with ${mentorName}.`,
+    `<div class="badge">Booking Update</div>
+     <h2>Hello, ${menteeName}</h2>
+     <p><strong>${mentorName}</strong> is unable to accept your booking request for this time slot.</p>
+     ${reason ? `<div class="card"><p class="card-label">Mentor Note:</p><p class="card-value" style="text-align: left; margin-top: 4px;">"${reason}"</p></div>` : ''}
+     <p>If you made a payment for this session, your funds will be fully refunded to your wallet balance automatically.</p>`
   ),
 
-  bookingCancelled: (mentorName, menteeName, reason) => createBaseTemplate(
-    'Booking Cancelled',
-    `<h2>Hello, ${mentorName}</h2>
-     <p><span class="strong">${menteeName}</span> has cancelled your upcoming session.</p>
-     ${reason ? `<p><span class="strong">Reason:</span> ${reason}</p>` : ''}`
+  // 12. Booking Cancelled
+  bookingCancelled: (recipientName, otherPersonName, reason) => createBaseTemplate(
+    'Session Cancelled',
+    `Notice: Upcoming session with ${otherPersonName} has been cancelled.`,
+    `<div class="badge badge-urgent">Session Cancelled</div>
+     <h2>Hello, ${recipientName}</h2>
+     <p>Your upcoming mentorship session with <strong>${otherPersonName}</strong> has been cancelled.</p>
+     ${reason ? `<div class="card"><p class="card-label">Reason:</p><p class="card-value" style="text-align: left; margin-top: 4px;">"${reason}"</p></div>` : ''}
+     <p>You can browse open availability slots anytime to reschedule your session.</p>`
   ),
 
-  sessionReminder: (name, mentorOrMenteeName, timeString, joinUrl) => createBaseTemplate(
-    'Session Reminder',
-    `<h2>Hello, ${name}</h2>
-     <p>This is a reminder for your upcoming session with <span class="strong">${mentorOrMenteeName}</span>.</p>
-     <div class="details-box">
-        <p><span class="strong">Time:</span> ${timeString}</p>
+  // 13. Call Reminder — 1 Day Before (24 Hours)
+  reminder24h: (name, otherName, sessionTitle, dateStr, timeStr, joinUrl) => createBaseTemplate(
+    'Upcoming Call Tomorrow',
+    `Reminder: Your mentorship session with ${otherName} is scheduled for tomorrow.`,
+    `<div class="badge">Upcoming Session</div>
+     <h2>See you tomorrow, ${name}!</h2>
+     <p>This is a reminder that your mentorship session with <strong>${otherName}</strong> is scheduled for tomorrow.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Participant:</span>
+            <span class="card-value">${otherName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Session Topic:</span>
+            <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Date:</span>
+            <span class="card-value">${dateStr}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Time:</span>
+            <span class="card-value">${timeStr}</span>
+        </div>
      </div>
-     <a href="${joinUrl}" class="btn" style="color: #ffffff;">Join Session</a>`
+
+     <p>Please make sure your microphone, camera, and internet connection are ready before the call.</p>
+
+     <div class="btn-container">
+        <a href="${joinUrl}" class="btn">View Session Details</a>
+     </div>`
   ),
 
-  // Payments
+  // 14. Call Reminder — 1 Hour Before
+  reminder1h: (name, otherName, sessionTitle, timeStr, joinUrl) => createBaseTemplate(
+    'Call Starts in 1 Hour!',
+    `Your session with ${otherName} starts in 1 hour.`,
+    `<div class="badge badge-urgent">Starts in 1 Hour</div>
+     <h2>Your session is starting soon, ${name}!</h2>
+     <p>Your mentorship call with <strong>${otherName}</strong> starts in <strong>1 hour</strong> (${timeStr}).</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">With:</span>
+            <span class="card-value">${otherName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Topic:</span>
+            <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Start Time:</span>
+            <span class="card-value">${timeStr}</span>
+        </div>
+     </div>
+
+     <div class="btn-container">
+        <a href="${joinUrl}" class="btn">Prepare to Join</a>
+     </div>`
+  ),
+
+  // 15. Call Reminder — 10 Minutes Before (Urgent)
+  reminder10m: (name, otherName, sessionTitle, timeStr, joinUrl) => createBaseTemplate(
+    'Urgent: Call Starts in 10 Minutes!',
+    `Your call with ${otherName} begins in 10 minutes. Click to join.`,
+    `<div class="badge badge-urgent">Starting in 10 Minutes</div>
+     <h2>Get ready! Call starts in 10 minutes</h2>
+     <p>Hello ${name}, your mentorship session with <strong>${otherName}</strong> is starting in just <strong>10 minutes</strong>!</p>
+
+     <div class="card" style="border-left: 4px solid #b22222;">
+        <div class="card-row">
+            <span class="card-label">Call With:</span>
+            <span class="card-value">${otherName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Scheduled Time:</span>
+            <span class="card-value">${timeStr}</span>
+        </div>
+     </div>
+
+     <div class="btn-container">
+        <a href="${joinUrl}" class="btn" style="font-size: 16px; padding: 16px 36px;">Join Call Now</a>
+     </div>`
+  ),
+
+  // 16. Payment Success
   paymentSuccess: (name, amount, purpose, receiptUrl) => createBaseTemplate(
-    'Payment Successful',
-    `<h2>Hello, ${name}</h2>
-     <p>Your payment of <span class="strong">${amount}</span> was successful.</p>
-     <div class="details-box">
-        <p><span class="strong">Purpose:</span> ${purpose}</p>
-        <p><span class="strong">Date:</span> ${new Date().toLocaleDateString()}</p>
+    'Payment Confirmation',
+    `Your payment of ${amount} has been processed successfully.`,
+    `<div class="badge badge-success">Payment Received</div>
+     <h2>Payment Receipt</h2>
+     <p>Hello ${name}, thank you for your payment. Your transaction was completed successfully.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Amount Paid:</span>
+            <span class="card-value">${amount}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Description:</span>
+            <span class="card-value">${purpose}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Date:</span>
+            <span class="card-value">${new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+        </div>
      </div>
-     ${receiptUrl ? `<a href="${receiptUrl}" class="btn" style="color: #ffffff;">View Receipt</a>` : ''}`
+
+     ${receiptUrl ? `<div class="btn-container"><a href="${receiptUrl}" class="btn">View Full Receipt</a></div>` : ''}`
   ),
 
-  paymentFailed: (name, amount, purpose, retryUrl) => createBaseTemplate(
-    'Payment Failed',
-    `<h2>Hello, ${name}</h2>
-     <p>Unfortunately, your payment of <span class="strong">${amount}</span> for ${purpose} failed to process.</p>
-     <p>Please try again or use a different payment method.</p>
-     ${retryUrl ? `<a href="${retryUrl}" class="btn" style="color: #ffffff;">Retry Payment</a>` : ''}`
-  ),
-
+  // 17. Refund Initiated
   refundInitiated: (name, amount, purpose) => createBaseTemplate(
-    'Refund Initiated',
-    `<h2>Hello, ${name}</h2>
-     <p>We have initiated a refund of <span class="strong">${amount}</span> for ${purpose}.</p>
-     <p>It may take a few business days for the funds to appear in your account.</p>`
+    'Refund Processed',
+    `Your refund of ${amount} has been credited to your wallet balance.`,
+    `<div class="badge badge-success">Refund Completed</div>
+     <h2>Hello, ${name}</h2>
+     <p>A refund of <strong>${amount}</strong> for <em>"${purpose}"</em> has been credited directly to your Wisicom wallet balance.</p>
+     <p>You can use this balance for future session bookings or withdraw it to your bank account anytime.</p>`
   ),
 
+  // 18. Payout Processed
   payoutProcessed: (name, amount) => createBaseTemplate(
-    'Payout Processed',
-    `<h2>Hello, ${name}</h2>
-     <p>Great news! A payout of <span class="strong">${amount}</span> has been processed to your bank account.</p>
-     <p>Please allow standard bank processing times for the funds to reflect.</p>`
-  ),
+    'Bank Payout Completed',
+    `Your payout of ${amount} has been processed to your bank account.`,
+    `<div class="badge badge-success">Payout Sent</div>
+     <h2>Payout Processed!</h2>
+     <p>Hello ${name}, great news! Your withdrawal request of <strong>${amount}</strong> has been processed to your bank account.</p>
+     <p>Please allow standard bank settlement processing times for the funds to reflect in your account statement.</p>`
+  )
 };

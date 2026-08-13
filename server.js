@@ -272,6 +272,10 @@ db.sequelize.sync() // creates missing tables but avoids complex alterations to 
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
+
+            // Start session call reminder scheduler (24h, 1h, 10min notifications)
+            const reminderService = require('./services/reminderService');
+            reminderService.start();
         });
     })
     .catch((err) => {
