@@ -20,15 +20,27 @@ class NotificationService {
 
     if (!target) return { user: null, profileId: null };
 
-    // If target is an object with email
+    // If target is an object with email (e.g. User model or custom recipient object)
     if (target.email) {
       userRecord = target;
       if (type === 'mentor') {
-        const m = target.mentor || await Mentor.findOne({ where: { user_id: target.id } });
-        profileId = m ? m.id : target.id;
+        if (target.mentor && target.mentor.id) {
+          profileId = target.mentor.id;
+        } else if (target.user_id && target.id) {
+          profileId = target.id;
+        } else {
+          const m = await Mentor.findOne({ where: { user_id: target.id } });
+          profileId = m ? m.id : target.id;
+        }
       } else if (type === 'mentee') {
-        const me = target.mentee || await Mentee.findOne({ where: { user_id: target.id } });
-        profileId = me ? me.id : target.id;
+        if (target.mentee && target.mentee.id) {
+          profileId = target.mentee.id;
+        } else if (target.user_id && target.id) {
+          profileId = target.id;
+        } else {
+          const me = await Mentee.findOne({ where: { user_id: target.id } });
+          profileId = me ? me.id : target.id;
+        }
       } else {
         profileId = target.id;
       }
@@ -38,7 +50,7 @@ class NotificationService {
     // If target is Mentor or Mentee instance (has user_id but no email directly attached)
     if (target.user_id) {
       profileId = target.id;
-      userRecord = await User.findByPk(target.user_id);
+      userRecord = target.user || await User.findByPk(target.user_id);
       return { user: userRecord, profileId };
     }
 
@@ -247,30 +259,50 @@ class NotificationService {
     const { user: menteeUser, profileId: menteeProfileId } = await this.resolveUserAndProfile(mentee, 'mentee');
     const { user: mentorUser, profileId: mentorProfileId } = await this.resolveUserAndProfile(mentor, 'mentor');
 
-    if (!mentorUser || !mentorUser.email) {
-      console.error('❌ sendBookingRequest failed: Mentor email not found', { mentor, mentorUser });
-      return;
-    }
-
-    const dashboardUrl = `${process.env.FRONTEND_URL}/mentor/dashboard`;
     const menteeName = menteeUser ? (menteeUser.firstName || menteeUser.name) : 'A Mentee';
-    const mentorName = mentorUser.firstName || mentorUser.name || 'Mentor';
+    const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Mentor';
 
     const { topic, dateTime } = this.parseSessionDetails(sessionDetails);
 
-    await this.sendNotification({
-      receiverId: mentorProfileId || mentorUser.id,
-      receiverType: 'mentor',
-      senderId: menteeProfileId || (menteeUser ? menteeUser.id : null),
-      type: 'booking',
-      title: 'New Booking Request',
-      message: `${menteeName} has requested a mentorship session with you.`,
-      link: '/mentor/bookings',
-      emailData: {
-        to: mentorUser.email,
-        html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl)
-      }
-    });
+    // 1. Notify Mentor (In-app + Email)
+    if (mentorUser && mentorUser.email) {
+      const dashboardUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentor/dashboard`;
+      await this.sendNotification({
+        receiverId: mentorProfileId || mentorUser.id,
+        receiverType: 'mentor',
+        senderId: menteeProfileId || (menteeUser ? menteeUser.id : null),
+        type: 'booking',
+        title: 'New Booking Request',
+        message: `${menteeName} has requested a mentorship session with you.`,
+        link: '/mentor/bookings',
+        emailData: {
+          to: mentorUser.email,
+          html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl)
+        }
+      });
+    } else {
+      console.error('❌ sendBookingRequest warning: Mentor email not found', { mentor, mentorUser });
+    }
+
+    // 2. Notify Mentee (In-app + Email confirmation)
+    if (menteeUser && menteeUser.email) {
+      const bookingsUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentee/bookings`;
+      await this.sendNotification({
+        receiverId: menteeProfileId || menteeUser.id,
+        receiverType: 'mentee',
+        senderId: mentorProfileId || (mentorUser ? mentorUser.id : null),
+        type: 'booking',
+        title: 'Booking Request Submitted',
+        message: `Your booking request with ${mentorName} has been submitted successfully.`,
+        link: '/mentee/bookings',
+        emailData: {
+          to: menteeUser.email,
+          html: templates.bookingRequestConfirmation(menteeName, mentorName, topic, dateTime, bookingsUrl)
+        }
+      });
+    } else {
+      console.error('❌ sendBookingRequest warning: Mentee email not found', { mentee, menteeUser });
+    }
   }
 
   async sendBookingAccepted(mentee, mentor, sessionDetails, meetingLink) {
@@ -373,7 +405,7 @@ class NotificationService {
       type: 'booking',
       title: 'Call Reminder: Tomorrow',
       message: `Reminder: Your mentorship call with ${otherPersonName} is scheduled for tomorrow at ${timeStr}.`,
-      link: `/call/${meetingId}`,
+      link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
         html: templates.reminder24h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, dateStr, timeStr, joinUrl)
@@ -392,7 +424,7 @@ class NotificationService {
       type: 'booking',
       title: 'Call Starts in 1 Hour!',
       message: `Your mentorship call with ${otherPersonName} starts in 1 hour (${timeStr}).`,
-      link: `/call/${meetingId}`,
+      link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
         html: templates.reminder1h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
@@ -410,8 +442,8 @@ class NotificationService {
       receiverType: userType,
       type: 'booking',
       title: 'Urgent: Call Starts in 10 Minutes!',
-      message: `Your mentorship call with ${otherPersonName} is starting in 10 minutes! Click to join.`,
-      link: `/call/${meetingId}`,
+      message: `Your mentorship call with ${otherPersonName} is starting in 10 minutes! Click to view session details.`,
+      link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
         html: templates.reminder10m(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)

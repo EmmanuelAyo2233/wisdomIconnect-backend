@@ -164,7 +164,37 @@ module.exports = {
      <p>Don't be discouraged — there are many incredible mentors and learners eager to connect on Wisicom!</p>`
   ),
 
-  // 9. Booking Request Sent (to Mentor)
+  // 9. Booking Request Confirmation (to Mentee)
+  bookingRequestConfirmation: (menteeName, mentorName, sessionTitle, dateTime, bookingsUrl) => createBaseTemplate(
+    'Booking Request Submitted',
+    `Your mentorship session request with ${mentorName} has been sent.`,
+    `<div class="badge badge-success">Request Sent</div>
+     <h2>Booking Request Submitted, ${menteeName}!</h2>
+     <p>Your mentorship session request has been submitted to <strong>${mentorName}</strong>.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Mentor:</span>
+            <span class="card-value">${mentorName}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Session Topic:</span>
+            <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Date & Time:</span>
+            <span class="card-value">${dateTime}</span>
+        </div>
+     </div>
+
+     <p>We will notify you as soon as ${mentorName} responds to your booking request.</p>
+
+     <div class="btn-container">
+        <a href="${bookingsUrl}" class="btn">View My Bookings</a>
+     </div>`
+  ),
+
+  // 10. Booking Request Sent (to Mentor)
   bookingRequestSent: (mentorName, menteeName, sessionTitle, dateTime, dashboardUrl) => createBaseTemplate(
     'New Booking Request Received',
     `${menteeName} has requested a mentorship session with you.`,

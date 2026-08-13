@@ -99,24 +99,24 @@ async function sendReminderForAppointment(appointment, window) {
     } : null;
 
     // Send to Mentee
-    if (menteeReceiver && menteeReceiver.email) {
+    if (menteeUser && menteeUser.email) {
       if (window === '24h') {
-        await notificationService.sendSessionReminder24h(menteeReceiver, 'mentee', mentorName, sessionTitle, dateStr, timeStr, meetingId);
+        await notificationService.sendSessionReminder24h(menteeUser, 'mentee', mentorName, sessionTitle, dateStr, timeStr, meetingId);
       } else if (window === '1h') {
-        await notificationService.sendSessionReminder1h(menteeReceiver, 'mentee', mentorName, sessionTitle, timeStr, meetingId);
+        await notificationService.sendSessionReminder1h(menteeUser, 'mentee', mentorName, sessionTitle, timeStr, meetingId);
       } else if (window === '10m') {
-        await notificationService.sendSessionReminder10m(menteeReceiver, 'mentee', mentorName, sessionTitle, timeStr, meetingId);
+        await notificationService.sendSessionReminder10m(menteeUser, 'mentee', mentorName, sessionTitle, timeStr, meetingId);
       }
     }
 
     // Send to Mentor
-    if (mentorReceiver && mentorReceiver.email) {
+    if (mentorUser && mentorUser.email) {
       if (window === '24h') {
-        await notificationService.sendSessionReminder24h(mentorReceiver, 'mentor', menteeName, sessionTitle, dateStr, timeStr, meetingId);
+        await notificationService.sendSessionReminder24h(mentorUser, 'mentor', menteeName, sessionTitle, dateStr, timeStr, meetingId);
       } else if (window === '1h') {
-        await notificationService.sendSessionReminder1h(mentorReceiver, 'mentor', menteeName, sessionTitle, timeStr, meetingId);
+        await notificationService.sendSessionReminder1h(mentorUser, 'mentor', menteeName, sessionTitle, timeStr, meetingId);
       } else if (window === '10m') {
-        await notificationService.sendSessionReminder10m(mentorReceiver, 'mentor', menteeName, sessionTitle, timeStr, meetingId);
+        await notificationService.sendSessionReminder10m(mentorUser, 'mentor', menteeName, sessionTitle, timeStr, meetingId);
       }
     }
 
