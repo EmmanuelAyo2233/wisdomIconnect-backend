@@ -32,19 +32,24 @@ class EmailService {
       }
     }
 
-    // 2. Fallback to Nodemailer SMTP (e.g. Gmail)
+    // 2. Fallback to Nodemailer SMTP (e.g. Brevo SMTP / Gmail)
     const smtpEmail = process.env.SMTP_EMAIL || process.env.GMAIL_USER;
     const smtpPass = process.env.SMTP_PASSWORD || process.env.GMAIL_PASS;
+    const smtpHost = process.env.SMTP_SERVER || process.env.SMTP_SEVER || 'smtp-relay.brevo.com';
+    const smtpPort = Number(process.env.SMTP_PORT) || 587;
 
     if (smtpEmail && smtpPass) {
       try {
         const transporter = nodemailer.createTransport({
-          host: process.env.SMTP_SERVER || process.env.SMTP_SEVER || 'smtp.gmail.com',
-          port: Number(process.env.SMTP_PORT) || 465,
-          secure: Number(process.env.SMTP_PORT) === 465 || !process.env.SMTP_PORT, // true for 465
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpPort === 465, // true for 465, false for 587 / 2525
           auth: {
             user: smtpEmail,
             pass: smtpPass
+          },
+          tls: {
+            rejectUnauthorized: false
           }
         });
 
