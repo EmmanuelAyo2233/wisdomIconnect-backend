@@ -250,13 +250,27 @@ class NotificationService {
     });
   }
 
+  async sendWithdrawalRequested(mentor, amount) {
+    await this.sendNotification({
+      receiverId: mentor.id,
+      receiverType: 'mentor',
+      type: 'payment',
+      title: 'Withdrawal Request Received',
+      message: `Your withdrawal request of ${amount} has been received and is being processed. You'll be notified once it's complete.`,
+      emailData: {
+        to: mentor.email,
+        html: templates.withdrawalRequested(mentor.firstName || mentor.name, amount)
+      }
+    });
+  }
+
   async sendPayoutProcessed(mentor, amount) {
     await this.sendNotification({
       receiverId: mentor.id,
       receiverType: 'mentor',
       type: 'payment',
-      title: 'Payout Processed',
-      message: `A payout of ${amount} has been processed to your account.`,
+      title: 'Payout Transferred Successfully',
+      message: `Your payout of ${amount} has been approved and transferred to your bank account.`,
       emailData: {
         to: mentor.email,
         html: templates.payoutProcessed(mentor.firstName || mentor.name, amount)

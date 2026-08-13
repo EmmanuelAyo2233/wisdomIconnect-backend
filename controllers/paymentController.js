@@ -288,7 +288,14 @@ exports.withdrawFunds = async (req, res) => {
 
         const user = await User.findByPk(userId);
         if (user) {
-            notificationService.sendPayoutProcessed(user, `₦${amount.toLocaleString()}`).catch(console.error);
+            // Build a notification receiver using the mentor profile ID for in-app notification
+            const mentorProfile = {
+                id:        mentor ? mentor.id : userId,
+                email:     user.email,
+                name:      user.name,
+                firstName: user.firstName,
+            };
+            notificationService.sendWithdrawalRequested(mentorProfile, `₦${amount.toLocaleString()}`).catch(console.error);
         }
 
         logActivity({

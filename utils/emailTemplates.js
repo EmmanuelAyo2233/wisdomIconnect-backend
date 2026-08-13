@@ -366,13 +366,51 @@ module.exports = {
      <p>You can use this balance for future session bookings or withdraw it to your bank account anytime.</p>`
   ),
 
-  // 18. Payout Processed
+
+  // 18. Withdrawal Requested (mentor initiates withdrawal — pending admin review)
+  withdrawalRequested: (name, amount) => createBaseTemplate(
+    'Withdrawal Request Received',
+    `Your withdrawal request of ${amount} has been received and is being processed.`,
+    `<div class="badge">Withdrawal Request</div>
+     <h2>Withdrawal Request Received</h2>
+     <p>Hello ${name}, your withdrawal request of <strong>${amount}</strong> has been received successfully.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Amount Requested:</span>
+            <span class="card-value">${amount}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Status:</span>
+            <span class="card-value" style="color: #d97706;">Pending Processing</span>
+        </div>
+     </div>
+
+     <p>Our team will process your withdrawal and transfer the funds to your registered bank account. This typically takes <strong>1–3 business days</strong>.</p>
+     <p style="font-size: 13px; color: #9ca3af;">You will receive a confirmation email once the funds have been transferred.</p>`
+  ),
+
+  // 19. Payout Approved (admin actually processes the bank transfer)
   payoutProcessed: (name, amount) => createBaseTemplate(
-    'Bank Payout Completed',
-    `Your payout of ${amount} has been processed to your bank account.`,
-    `<div class="badge badge-success">Payout Sent</div>
-     <h2>Payout Processed!</h2>
-     <p>Hello ${name}, great news! Your withdrawal request of <strong>${amount}</strong> has been processed to your bank account.</p>
-     <p>Please allow standard bank settlement processing times for the funds to reflect in your account statement.</p>`
+    'Payout Successfully Transferred',
+    `Your payout of ${amount} has been sent to your bank account.`,
+    `<div class="badge badge-success">Payout Completed</div>
+     <h2>Your payout is on its way!</h2>
+     <p>Hello ${name}, great news! Your withdrawal of <strong>${amount}</strong> has been approved and the funds have been transferred to your registered bank account.</p>
+
+     <div class="card">
+        <div class="card-row">
+            <span class="card-label">Amount Transferred:</span>
+            <span class="card-value">${amount}</span>
+        </div>
+        <div class="card-row">
+            <span class="card-label">Status:</span>
+            <span class="card-value" style="color: #059669;">Transfer Initiated</span>
+        </div>
+     </div>
+
+     <p>Please allow <strong>1–2 business days</strong> for the funds to reflect in your account, depending on your bank's processing times.</p>
+     <p style="font-size: 13px; color: #9ca3af;">If you have any concerns, contact our support team at support@wisdomconnect.com</p>`
   )
 };
+
