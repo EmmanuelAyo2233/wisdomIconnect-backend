@@ -54,6 +54,7 @@ const getAllMentors = async (req, res) => {
           rating: m.user?.rating || 0,
         },
         role: m.role || "Mentor",
+        occupation: m.role || "Mentor",
         expertise: safeParse(m.expertise),
         yearsOfExperience: m.yearsOfExperience || 0,
         attendance: m.attendance || "0%",
@@ -96,13 +97,8 @@ const getMentorsDetails = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Mentor ID is required" });
     }
 
-    const mentor = await Mentor.findOne({
-      where: {
-        [Op.or]: [
-          { id: id },
-          { user_id: id }
-        ]
-      },
+    // 1. First look up directly by Mentor.id (primary key)
+    let mentor = await Mentor.findByPk(id, {
       include: [
         {
           model: User,
@@ -122,6 +118,31 @@ const getMentorsDetails = async (req, res) => {
         },
       ],
     });
+
+    // 2. If not found by Mentor.id, look up by User.id (user_id) as fallback
+    if (!mentor) {
+      mentor = await Mentor.findOne({
+        where: { user_id: id },
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: [
+              "id",
+              "name",
+              "email",
+              "picture",
+              "status",
+              "userType",
+              "countryCode",
+              "mentorLevel",
+              "sessionsCompleted",
+              "rating",
+            ],
+          },
+        ],
+      });
+    }
 
     if (!mentor) {
       return res.status(404).json({ status: "fail", message: "Mentor not found" });
@@ -220,7 +241,8 @@ const getMentorsDetails = async (req, res) => {
       linkedinUrl: mentor.linkedinUrl || "",
       isOnline: mentor.isOnline,
       countryCode: mentor.user?.countryCode || "NG",
-      role: mentor.role || "", // ✅ role comes from mentor table
+      role: mentor.role || "Professional Mentor",
+      occupation: mentor.role || "Professional Mentor",
       bio: mentor.bio || "",
       expertise: safeParse(mentor.expertise),
       topics: safeParse(mentor.topics),

@@ -188,6 +188,68 @@ class NotificationService {
     });
   }
 
+  async sendMentorApplicationReceived(user) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, 'mentor');
+    if (!userRecord || !userRecord.email) return;
+
+    await this.sendNotification({
+      receiverId: profileId || userRecord.id,
+      receiverType: 'mentor',
+      type: 'auth',
+      title: 'Mentor Application Received',
+      message: 'Thank you for your interest in becoming our mentor! We have received your application and will review your request and send an update to you in the next 24 hours.',
+      emailData: {
+        to: userRecord.email,
+        subject: 'Thank You for Applying to Be a Mentor on Wisicom',
+        html: templates.mentorApplicationReceived(userRecord.firstName || userRecord.name || 'Mentor')
+      }
+    });
+  }
+
+  async sendMentorApprovalNotification(user) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, 'mentor');
+    if (!userRecord || !userRecord.email) return;
+
+    // 1. Send Mentor Approval Notification
+    await this.sendNotification({
+      receiverId: profileId || userRecord.id,
+      receiverType: 'mentor',
+      type: 'system',
+      title: 'Mentor Application Approved 🎉',
+      message: 'Congratulations! Your mentor application has been approved. Your profile is now active and visible to mentees for bookings.',
+      emailData: {
+        to: userRecord.email,
+        subject: 'Congratulations! Your Mentor Application Has Been Approved 🎉',
+        html: templates.mentorApprovedEmail(userRecord.firstName || userRecord.name || 'Mentor')
+      }
+    });
+
+    // 2. Send Welcome Notification
+    await this.sendWelcomeNotification(userRecord, 'mentor');
+  }
+
+  async sendMentorRejectionNotification(user) {
+    const { user: userRecord, profileId } = await this.resolveUserAndProfile(user, 'mentee');
+    if (!userRecord || !userRecord.email) return;
+
+    // 1. Send Application Rejection Notice with Mentee Option
+    await this.sendNotification({
+      receiverId: profileId || userRecord.id,
+      receiverType: 'mentee',
+      type: 'system',
+      title: 'Mentor Application Status Update',
+      message: 'Thank you for your interest in becoming our mentor. After review, your mentor application was not approved at this time, but you can continue as a mentee to explore and connect with mentors.',
+      emailData: {
+        to: userRecord.email,
+        subject: 'Update on Your Wisicom Mentor Application',
+        html: templates.mentorRejectedEmail(userRecord.firstName || userRecord.name || 'User')
+      }
+    });
+
+    // 2. Send Welcome Notification for Mentee Account
+    await this.sendWelcomeNotification(userRecord, 'mentee');
+  }
+
   async sendPasswordReset(user, token) {
     if (!user || !user.email) return;
     const url = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/reset-password?token=${token}`;

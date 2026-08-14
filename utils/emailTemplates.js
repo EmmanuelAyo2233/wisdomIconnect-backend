@@ -101,6 +101,58 @@ module.exports = {
      </div>`
   ),
 
+  // 3a. Mentor Application Received Email
+  mentorApplicationReceived: (name) => createBaseTemplate(
+    'Mentor Application Received - Wisicom',
+    'Thank you for your interest in becoming a mentor with Wisicom.',
+    `<div class="badge" style="background-color: #eff6ff; color: #1d4ed8; border-color: #bfdbfe;">Application Under Review</div>
+     <h2>Thank You for Your Interest, ${name}!</h2>
+     <p>Thank you for your interest in becoming a mentor with Wisicom! We have successfully received your application, background details, and submitted credentials.</p>
+     <p>Our team is currently reviewing your profile to ensure the highest quality mentorship experience for our community. We will review your request and send an update to you in the next 24 hours.</p>
+     
+     <div class="card">
+        <div class="card-row">
+           <span class="card-label">Application Status</span>
+           <span class="card-value" style="color: #d97706;">Under Review ⏳</span>
+        </div>
+        <div class="card-row">
+           <span class="card-label">Estimated Response Time</span>
+           <span class="card-value">Within 24 Hours</span>
+        </div>
+     </div>
+
+     <p style="font-size: 13px; color: #6b7280; text-align: center;">Once approved, your mentor profile will go live immediately so mentees can discover and book sessions with you.</p>`
+  ),
+
+  // 3b. Mentor Approved Email
+  mentorApprovedEmail: (name) => createBaseTemplate(
+    'Mentor Application Approved 🎉',
+    'Congratulations! Your mentor application on Wisicom has been approved.',
+    `<div class="badge badge-success">Application Approved</div>
+     <h2>Congratulations, ${name}! 🎉</h2>
+     <p>Great news! Your mentor application has been reviewed and <strong>approved</strong> by our team.</p>
+     <p>Your profile is now live and searchable across Wisicom. You can now set up your calendar availability, create and publish playbooks, and start accepting session bookings from ambitious mentees worldwide.</p>
+
+     <div class="btn-container">
+        <a href="${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentor/dashboard" class="btn">Go to Mentor Dashboard</a>
+     </div>`
+  ),
+
+  // 3c. Mentor Application Rejected (Converted to Mentee) Email
+  mentorRejectedEmail: (name) => createBaseTemplate(
+    'Update on Your Wisicom Mentor Application',
+    'Important update regarding your mentor application and account status.',
+    `<div class="badge" style="background-color: #fef2f2; color: #b91c1c; border-color: #fecaca;">Application Status</div>
+     <h2>Hello, ${name}</h2>
+     <p>Thank you for your interest in becoming a mentor with Wisicom and for taking the time to share your experience with us.</p>
+     <p>After careful review of your application, we are unable to approve your mentor profile at this time.</p>
+     <p><strong>Good news:</strong> You can continue exploring Wisicom as a <strong>Mentee</strong>! Your account has been automatically configured with mentee access so you can search top mentors, book 1-on-1 guidance sessions, and learn valuable skills across diverse industries.</p>
+
+     <div class="btn-container">
+        <a href="${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentee/dashboard" class="btn">Explore as a Mentee</a>
+     </div>`
+  ),
+
   // 4. Password Reset Link
   passwordReset: (name, resetUrl) => createBaseTemplate(
     'Reset Your Password',

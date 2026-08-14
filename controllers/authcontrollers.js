@@ -137,6 +137,7 @@
 
         const mentor = await Mentor.create({
           user_id: newUser.id,
+          role: b.occupation || b.role || null,
           yearsOfExperience: b.yearsOfExperience || b.experience || 0,
           bio: shortBio,   // ✅ correct column
           expertise: JSON.stringify(expertise),
@@ -207,6 +208,7 @@
 
       const mentee = await Mentee.create({
           user_id: newUser.id,
+          role: b.occupation || b.role || null,
           bio: shortBio,
           interest: JSON.stringify(interests),
           expertise: JSON.stringify(expertise),
@@ -257,7 +259,13 @@
         return res.status(400).json({ status: "fail", message: "Invalid email address" });
       }
 
-      const user = await User.findOne({ where: { email } });
+      const user = await User.findOne({
+        where: { email },
+        include: [
+          { model: Mentor, as: "mentor", required: false },
+          { model: Mentee, as: "mentee", required: false },
+        ]
+      });
       if (!user) {
         return res.status(404).json({ status: "fail", message: "User not found" });
       }
@@ -318,6 +326,8 @@ return res.status(200).json({
     userType: user.userType,
     picture: user.picture || null,
     status: user.status,
+    role: user.mentor?.role ?? user.mentee?.role ?? (user.userType === 'mentor' ? 'Professional Mentor' : 'Mentee'),
+    occupation: user.mentor?.role ?? user.mentee?.role ?? (user.userType === 'mentor' ? 'Professional Mentor' : 'Mentee'),
     isOnline: user.mentor ? user.mentor.isOnline : false,
 
     // Safe optional fields if you loaded associations; otherwise they’ll be undefined (which is fine)
@@ -429,7 +439,11 @@ const restrictTo = (...userType) => {
         return res.status(404).json({ status: "fail", message: "Mentor not found" });
       }
 
-      await user.update({ status: "approved" });
+      await user.update({ status: "approved", approvedAt: new Date() });
+
+      const userResponse = user.get({ plain: true });
+      delete userResponse.password;
+      notificationService.sendMentorApprovalNotification(userResponse).catch(err => console.error("Notification Error:", err));
 
       return res.status(200).json({
         status: "success",
@@ -453,7 +467,7 @@ const restrictTo = (...userType) => {
         return res.status(404).json({ status: "fail", message: "Mentor not found" });
       }
 
-      // Remove mentor profile (optional: you can soft-delete instead)
+      // Remove mentor profile
       await Mentor.destroy({ where: { user_id: userId }, transaction: t });
 
       // Switch role to mentee and approve
@@ -473,6 +487,11 @@ const restrictTo = (...userType) => {
       }
 
       await t.commit();
+
+      const userResponse = user.get({ plain: true });
+      delete userResponse.password;
+      notificationService.sendMentorRejectionNotification(userResponse).catch(err => console.error("Notification Error:", err));
+
       return res.status(200).json({
         status: "success",
         message: "Mentor application rejected. User switched to mentee.",
@@ -606,10 +625,14 @@ const restrictTo = (...userType) => {
         status: "success"
       });
 
-      // Send Welcome Notification now that they are verified
+      // Send Appropriate Notification now that they are verified
       const userResponse = user.get({ plain: true });
       delete userResponse.password;
-      notificationService.sendWelcomeNotification(userResponse, user.userType).catch(err => console.error(err));
+      if (user.userType === "mentor") {
+        notificationService.sendMentorApplicationReceived(userResponse).catch(err => console.error(err));
+      } else {
+        notificationService.sendWelcomeNotification(userResponse, user.userType).catch(err => console.error(err));
+      }
 
       // 💥 Automatically Log them in after verification! 💥
       let banner = null;
@@ -637,6 +660,8 @@ const restrictTo = (...userType) => {
             userType: user.userType,
             picture: user.picture || null,
             status: user.status,
+            role: user.mentor?.role ?? user.mentee?.role ?? (user.userType === 'mentor' ? 'Professional Mentor' : 'Mentee'),
+            occupation: user.mentor?.role ?? user.mentee?.role ?? (user.userType === 'mentor' ? 'Professional Mentor' : 'Mentee'),
             isOnline: user.mentor ? user.mentor.isOnline : false,
             expertise: user.mentor?.expertise,
             linkedinUrl: user.mentor?.linkedinUrl,

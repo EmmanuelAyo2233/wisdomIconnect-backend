@@ -1,5 +1,6 @@
 // controllers/adminController.js
 const { User, Mentor, Mentee, Appointment, AdminLog, Payment, Report, Review, MentorCommendation, Wallet } = require("../models");
+const notificationService = require("../services/notificationService");
 
 // --- Get all users
 exports.getAllUsers = async (req, res) => {
@@ -162,9 +163,13 @@ exports.approveMentor = async (req, res) => {
     // Set approval info
     mentorUser.status = "approved";      // mark as approved
     mentorUser.userType = "mentor";      // ensure userType is mentor
-   mentorUser.approvedAt = new Date(); // set the approved date
+    mentorUser.approvedAt = new Date(); // set the approved date
 
     await mentorUser.save();             // save once
+
+    const plainUser = mentorUser.get ? mentorUser.get({ plain: true }) : mentorUser;
+    delete plainUser.password;
+    notificationService.sendMentorApprovalNotification(plainUser).catch(err => console.error("Error sending mentor approval notification:", err));
 
     res.json({ message: "Mentor approved successfully", mentor: mentorUser });
   } catch (err) {
@@ -184,12 +189,12 @@ exports.rejectMentor = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // 2️⃣ Update the user to mentee + rejected
+    // 2️⃣ Update the user to mentee with approved status so they can continue using the platform
     mentorUser.userType = "mentee";
-    mentorUser.status = "rejected";
+    mentorUser.status = "approved";
     await mentorUser.save();
 
-    // 3️⃣ Remove or mark their mentor profile
+    // 3️⃣ Remove their mentor profile
     await Mentor.destroy({ where: { user_id: id } });
     
     // 4️⃣ Create Mentee profile if it doesn't exist
@@ -197,6 +202,10 @@ exports.rejectMentor = async (req, res) => {
     if (!existingMentee) {
       await Mentee.create({ user_id: id });
     }
+
+    const plainUser = mentorUser.get ? mentorUser.get({ plain: true }) : mentorUser;
+    delete plainUser.password;
+    notificationService.sendMentorRejectionNotification(plainUser).catch(err => console.error("Error sending mentor rejection notification:", err));
 
     res.json({
       message: "Mentor rejected successfully, switched to mentee and removed from mentor list"
