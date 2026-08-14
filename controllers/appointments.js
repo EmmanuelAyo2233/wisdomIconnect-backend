@@ -201,24 +201,59 @@ exports.bookAppointment = async (req, res) => {
       }
     }
 
-    // ✅ Notify mentor
+    // ✅ Booking Notifications
     const actingUser = await User.findByPk(req.user.id);
-    const actingName = actingUser ? actingUser.name : (req.user.name || "A Mentee");
+    const actingName = actingUser ? (actingUser.name || actingUser.firstName) : (req.user.name || "A Mentee");
     const paymentText = sessionAmount > 0 ? ` (Paid: ₦${sessionAmount.toLocaleString()})` : '';
     
-    // Check Notification Prefs
+    // Check mentor notification preferences
     let notifPrefs = {};
     if (mentor.notifPrefs) {
       try { notifPrefs = typeof mentor.notifPrefs === 'string' ? JSON.parse(mentor.notifPrefs) : mentor.notifPrefs; } catch(e) {}
     }
 
-    if (notifPrefs.booking_requests_app !== false) {
-      const mentorUserObj = await User.findByPk(mentor.user_id);
-      if (mentor.autoAccept) {
-          notificationService.sendBookingAccepted(req.user, mentorUserObj, `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`, `/call/${meetingId}`).catch(console.error);
-      } else {
-          notificationService.sendBookingRequest(req.user, mentorUserObj, `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`).catch(console.error);
+    const mentorUserObj = await User.findByPk(mentor.user_id);
+    const menteeUserObj = actingUser || req.user;
+
+    if (mentor.autoAccept) {
+      // 1. Notify Mentee (session confirmed)
+      notificationService.sendBookingAccepted(
+        menteeUserObj, 
+        mentorUserObj, 
+        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`, 
+        `/call/${meetingId}`
+      ).catch(console.error);
+
+      // 2. Notify Mentor (session auto-accepted)
+      if (notifPrefs.booking_requests_app !== false && mentorUserObj && mentorUserObj.email) {
+        notificationService.sendNotification({
+          receiverId: mentor.id,
+          receiverType: 'mentor',
+          senderId: mentee.id,
+          type: 'booking',
+          title: 'New Session Booked (Auto-Accepted)',
+          message: `${actingName} has booked a session with you on ${date} at ${startTime}.${paymentText}`,
+          link: '/mentor/bookings',
+          emailData: {
+            to: mentorUserObj.email,
+            subject: 'New Session Booked (Auto-Accepted)',
+            html: require("../utils/emailTemplates").bookingRequestSent(
+              mentorUserObj.name || "Mentor",
+              actingName,
+              topic,
+              `${date} ${startTime}`,
+              `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentor/bookings`
+            )
+          }
+        }).catch(console.error);
       }
+    } else {
+      // Pending mentor review: sendBookingRequest notifies both mentor and mentee
+      notificationService.sendBookingRequest(
+        menteeUserObj, 
+        mentorUserObj, 
+        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`
+      ).catch(console.error);
     }
 
 // ✅ Auto-create accepted connection
@@ -662,18 +697,18 @@ exports.acceptAppointment = async (req, res) => {
     }
 
     // Create notification
-    const menteeRec = await Mentee.findByPk(appointment.menteeId);
-    const menteeUser = await User.findByPk(menteeRec.user_id);
+    let menteeRec = await Mentee.findByPk(appointment.menteeId);
+    let menteeUser = menteeRec ? await User.findByPk(menteeRec.user_id) : await User.findByPk(appointment.menteeId);
     const mentorUserObj = await User.findByPk(mentor.user_id);
     
-    notificationService.sendBookingAccepted(
-      menteeUser, 
-      mentorUserObj, 
-      `Date: ${appointment.date}\nTime: ${appointment.startTime}\nTopic: ${appointment.topic || 'Mentorship Session'}`, 
-      appointment.meetingLink
-    ).catch(console.error);
-
-
+    if (menteeUser) {
+      notificationService.sendBookingAccepted(
+        menteeUser, 
+        mentorUserObj, 
+        `Date: ${appointment.date}\nTime: ${appointment.startTime}\nTopic: ${appointment.topic || 'Mentorship Session'}`, 
+        appointment.meetingLink
+      ).catch(console.error);
+    }
 
     logActivity({
       type: "BOOKING",
@@ -711,8 +746,8 @@ exports.rejectAppointment = async (req, res) => {
     appointment.status = "rejected";
     await appointment.save();
 
-    const menteeRec = await Mentee.findByPk(appointment.menteeId);
-    const menteeUser = await User.findByPk(menteeRec.user_id);
+    let menteeRec = await Mentee.findByPk(appointment.menteeId);
+    let menteeUser = menteeRec ? await User.findByPk(menteeRec.user_id) : await User.findByPk(appointment.menteeId);
     const mentorUserObj = await User.findByPk(mentor.user_id);
 
     // Handle refund logic
@@ -737,7 +772,7 @@ exports.rejectAppointment = async (req, res) => {
                 await appointment.save();
 
                 await RefundRequest.create({
-                    userId: menteeRec.user_id,
+                    userId: menteeRec ? menteeRec.user_id : appointment.menteeId,
                     paymentId: payment.id,
                     appointmentId: appointment.id,
                     mentorId: appointment.mentorId,
@@ -756,7 +791,7 @@ exports.rejectAppointment = async (req, res) => {
                 await appointment.save();
 
                 await RefundRequest.create({
-                    userId: menteeRec.user_id,
+                    userId: menteeRec ? menteeRec.user_id : appointment.menteeId,
                     paymentId: payment.id,
                     appointmentId: appointment.id,
                     mentorId: appointment.mentorId,
@@ -773,17 +808,20 @@ exports.rejectAppointment = async (req, res) => {
         }
     }
 
-    notificationService.sendNotification({
-      receiverId: appointment.menteeId,
-      receiverType: "mentee",
-      type: "booking",
-      title: "Booking Declined",
-      message: "❌ Your appointment was declined by the mentor.",
-      emailData: {
-         to: menteeUser.email,
-         html: require("../utils/emailTemplates").bookingDeclined(menteeUser.name, mentorUserObj.name, "Mentor unavailable")
-      }
-    }).catch(console.error);
+    if (menteeUser && menteeUser.email) {
+      notificationService.sendNotification({
+        receiverId: menteeRec ? menteeRec.id : appointment.menteeId,
+        receiverType: "mentee",
+        type: "booking",
+        title: "Booking Declined",
+        message: "❌ Your appointment was declined by the mentor.",
+        emailData: {
+           to: menteeUser.email,
+           subject: 'Session Booking Declined',
+           html: require("../utils/emailTemplates").bookingDeclined(menteeUser.name, mentorUserObj ? mentorUserObj.name : "Your mentor", "Mentor unavailable")
+        }
+      }).catch(console.error);
+    }
 
     logActivity({
       type: "BOOKING",
@@ -828,20 +866,24 @@ exports.mentorRescheduleAppointment = async (req, res) => {
 
     await appointment.save();
 
-    const menteeRec = await Mentee.findByPk(appointment.menteeId);
-    const menteeUser = await User.findByPk(menteeRec.user_id);
+    let menteeRec = await Mentee.findByPk(appointment.menteeId);
+    let menteeUser = menteeRec ? await User.findByPk(menteeRec.user_id) : await User.findByPk(appointment.menteeId);
+    const mentorUserObj = await User.findByPk(mentor.user_id);
 
-    notificationService.sendNotification({
-      receiverId: appointment.menteeId,
-      receiverType: "mentee",
-      type: "update",
-      title: "Session Rescheduled",
-      message: `🔄 Your appointment was rescheduled to ${appointment.date} at ${appointment.startTime}.`,
-      emailData: {
-         to: menteeUser.email,
-         html: require("../utils/emailTemplates").sessionReminder(menteeUser.name, mentor.user?.name || "Your mentor", `${appointment.date} at ${appointment.startTime}`, appointment.meetingLink || "#")
-      }
-    }).catch(console.error);
+    if (menteeUser && menteeUser.email) {
+      notificationService.sendNotification({
+        receiverId: menteeRec ? menteeRec.id : appointment.menteeId,
+        receiverType: "mentee",
+        type: "update",
+        title: "Session Rescheduled",
+        message: `🔄 Your appointment was rescheduled to ${appointment.date} at ${appointment.startTime}.`,
+        emailData: {
+           to: menteeUser.email,
+           subject: 'Session Rescheduled by Mentor',
+           html: require("../utils/emailTemplates").sessionReminder(menteeUser.name, mentorUserObj ? mentorUserObj.name : "Your mentor", `${appointment.date} at ${appointment.startTime}`, appointment.meetingLink || "#")
+        }
+      }).catch(console.error);
+    }
 
     logActivity({
       type: "BOOKING",

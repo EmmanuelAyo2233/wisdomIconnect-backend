@@ -155,7 +155,7 @@ exports.respondToMessageRequest = async (req, res) => {
         const menteeUser = await User.findByPk(menteeObj.user_id);
 
         if (status === "accepted") {
-            notificationService.sendMessageRequestAccepted(req.user, menteeUser, "mentee").catch(console.error);
+            notificationService.sendMessageRequestAccepted(req.user, menteeUser).catch(console.error);
         } else {
             // Just standard in-app for declined, or use generic
             await notificationService.sendNotification({

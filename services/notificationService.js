@@ -26,6 +26,8 @@ class NotificationService {
       if (type === 'mentor') {
         if (target.mentor && target.mentor.id) {
           profileId = target.mentor.id;
+        } else if (target.mentorId) {
+          profileId = target.mentorId;
         } else if (target.user_id && target.id) {
           profileId = target.id;
         } else {
@@ -35,6 +37,8 @@ class NotificationService {
       } else if (type === 'mentee') {
         if (target.mentee && target.mentee.id) {
           profileId = target.mentee.id;
+        } else if (target.menteeId) {
+          profileId = target.menteeId;
         } else if (target.user_id && target.id) {
           profileId = target.id;
         } else {
@@ -58,12 +62,18 @@ class NotificationService {
     if (typeof target === 'number' || (typeof target === 'string' && !isNaN(target))) {
       const numericId = Number(target);
       if (type === 'mentor') {
-        const m = await Mentor.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        let m = await Mentor.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        if (!m) {
+          m = await Mentor.findOne({ where: { user_id: numericId }, include: [{ model: User, as: 'user' }] });
+        }
         if (m && m.user) {
           return { user: m.user, profileId: m.id };
         }
       } else if (type === 'mentee') {
-        const me = await Mentee.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        let me = await Mentee.findByPk(numericId, { include: [{ model: User, as: 'user' }] });
+        if (!me) {
+          me = await Mentee.findOne({ where: { user_id: numericId }, include: [{ model: User, as: 'user' }] });
+        }
         if (me && me.user) {
           return { user: me.user, profileId: me.id };
         }
@@ -137,7 +147,7 @@ class NotificationService {
       if (emailData && emailData.to) {
         await emailService.sendEmail({
           to: emailData.to,
-          subject: title || 'New Notification from Wisicom',
+          subject: emailData.subject || title || 'New Notification from Wisicom',
           html: emailData.html
         });
       } else if (emailData) {
@@ -176,6 +186,7 @@ class NotificationService {
       message: 'Your account has been successfully created. Explore the platform and connect with others!',
       emailData: {
         to: userRecord.email,
+        subject: 'Welcome to Wisicom!',
         html: templates.welcomeEmail(userRecord.firstName || userRecord.name || 'User')
       }
     });
@@ -183,7 +194,7 @@ class NotificationService {
 
   async sendPasswordReset(user, token) {
     if (!user || !user.email) return;
-    const url = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
+    const url = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/reset-password?token=${token}`;
     await emailService.sendEmail({
       to: user.email,
       subject: 'Reset your password',
@@ -195,7 +206,7 @@ class NotificationService {
   // MESSAGING EVENTS
   // ==========================================
 
-  async sendMessageRequest(sender, receiver, receiverType) {
+  async sendMessageRequest(sender, receiver, receiverType = 'mentor') {
     const { user: senderUser, profileId: senderProfileId } = await this.resolveUserAndProfile(sender, receiverType === 'mentor' ? 'mentee' : 'mentor');
     const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, receiverType);
     
@@ -204,7 +215,7 @@ class NotificationService {
       return;
     }
 
-    const messageUrl = `${process.env.FRONTEND_URL}/${receiverType}/messages`;
+    const messageUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/${receiverType}/messages`;
     const senderName = senderUser ? (senderUser.firstName || senderUser.name) : 'A User';
     const receiverName = receiverUser.firstName || receiverUser.name || 'User';
 
@@ -218,35 +229,37 @@ class NotificationService {
       link: `/${receiverType}/messages`,
       emailData: {
         to: receiverUser.email,
+        subject: 'New Connection Request',
         html: templates.messageRequest(receiverName, senderName, messageUrl)
       }
     });
   }
 
-  async sendMessageRequestAccepted(sender, receiver, senderType) {
-    const { user: senderUser, profileId: senderProfileId } = await this.resolveUserAndProfile(sender, senderType);
-    const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, senderType === 'mentor' ? 'mentee' : 'mentor');
+  async sendMessageRequestAccepted(mentor, mentee) {
+    const { user: mentorUser, profileId: mentorProfileId } = await this.resolveUserAndProfile(mentor, 'mentor');
+    const { user: menteeUser, profileId: menteeProfileId } = await this.resolveUserAndProfile(mentee, 'mentee');
 
-    if (!senderUser || !senderUser.email) {
-      console.error('❌ sendMessageRequestAccepted failed: Sender email not found');
+    if (!menteeUser || !menteeUser.email) {
+      console.error('❌ sendMessageRequestAccepted failed: Mentee email not found', { mentee, menteeUser });
       return;
     }
 
-    const chatUrl = `${process.env.FRONTEND_URL}/${senderType}/messages`;
-    const senderName = senderUser.firstName || senderUser.name || 'User';
-    const receiverName = receiverUser ? (receiverUser.firstName || receiverUser.name) : 'User';
+    const chatUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentee/messages`;
+    const menteeName = menteeUser.firstName || menteeUser.name || 'Mentee';
+    const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Your Mentor';
 
     await this.sendNotification({
-      receiverId: senderProfileId || senderUser.id,
-      receiverType: senderType,
-      senderId: receiverProfileId || (receiverUser ? receiverUser.id : null),
+      receiverId: menteeProfileId || menteeUser.id,
+      receiverType: 'mentee',
+      senderId: mentorProfileId || (mentorUser ? mentorUser.id : null),
       type: 'message_request_response',
       title: 'Connection Request Accepted',
-      message: `${receiverName} has accepted your connection request.`,
-      link: `/${senderType}/messages`,
+      message: `${mentorName} has accepted your connection request.`,
+      link: '/mentee/messages',
       emailData: {
-        to: senderUser.email,
-        html: templates.messageRequestAccepted(senderName, receiverName, chatUrl)
+        to: menteeUser.email,
+        subject: 'Connection Request Accepted',
+        html: templates.messageRequestAccepted(menteeName, mentorName, chatUrl)
       }
     });
   }
@@ -277,6 +290,7 @@ class NotificationService {
         link: '/mentor/bookings',
         emailData: {
           to: mentorUser.email,
+          subject: 'New Booking Request Received',
           html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl)
         }
       });
@@ -297,6 +311,7 @@ class NotificationService {
         link: '/mentee/bookings',
         emailData: {
           to: menteeUser.email,
+          subject: 'Booking Request Submitted',
           html: templates.bookingRequestConfirmation(menteeName, mentorName, topic, dateTime, bookingsUrl)
         }
       });
@@ -314,7 +329,7 @@ class NotificationService {
       return;
     }
 
-    const joinUrl = `${process.env.FRONTEND_URL}${meetingLink || '/mentee/sessions'}`;
+    const joinUrl = `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}${meetingLink || '/mentee/bookings'}`;
     const menteeName = menteeUser.firstName || menteeUser.name || 'Mentee';
     const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Your Mentor';
 
@@ -330,6 +345,7 @@ class NotificationService {
       link: '/mentee/bookings',
       emailData: {
         to: menteeUser.email,
+        subject: 'Session Booking Confirmed!',
         html: templates.bookingAccepted(menteeName, mentorName, topic, dateTime, joinUrl)
       }
     });
@@ -351,6 +367,7 @@ class NotificationService {
       message: `Your payment of ${amount} for ${purpose} was successful.`,
       emailData: {
         to: userRecord.email,
+        subject: 'Payment Confirmation',
         html: templates.paymentSuccess(userRecord.firstName || userRecord.name || 'User', amount, purpose)
       }
     });
@@ -368,6 +385,7 @@ class NotificationService {
       message: `Your withdrawal request of ${amount} has been received and is being processed. You'll be notified once it's complete.`,
       emailData: {
         to: mentorUser.email,
+        subject: 'Withdrawal Request Received',
         html: templates.withdrawalRequested(mentorUser.firstName || mentorUser.name || 'Mentor', amount)
       }
     });
@@ -385,6 +403,7 @@ class NotificationService {
       message: `Your payout of ${amount} has been approved and transferred to your bank account.`,
       emailData: {
         to: mentorUser.email,
+        subject: 'Payout Transferred Successfully',
         html: templates.payoutProcessed(mentorUser.firstName || mentorUser.name || 'Mentor', amount)
       }
     });
@@ -408,6 +427,7 @@ class NotificationService {
       link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
+        subject: 'Upcoming Call Tomorrow',
         html: templates.reminder24h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, dateStr, timeStr, joinUrl)
       }
     });
@@ -427,6 +447,7 @@ class NotificationService {
       link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
+        subject: 'Call Starts in 1 Hour!',
         html: templates.reminder1h(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
       }
     });
@@ -446,6 +467,7 @@ class NotificationService {
       link: `/${userType}/bookings`,
       emailData: {
         to: userRecord.email,
+        subject: 'Urgent: Call Starts in 10 Minutes!',
         html: templates.reminder10m(userRecord.firstName || userRecord.name || 'User', otherPersonName, sessionTitle, timeStr, joinUrl)
       }
     });

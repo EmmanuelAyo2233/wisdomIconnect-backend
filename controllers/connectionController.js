@@ -89,7 +89,7 @@ exports.respondConnection = async (req, res) => {
         const menteeUserObj = await User.findByPk(m.user_id);
         const mentorUserObj = await User.findByPk(mentor.user_id);
         
-        await notificationService.sendMessageRequestAccepted(mentorUserObj, menteeUserObj, "mentee");
+        await notificationService.sendMessageRequestAccepted(mentorUserObj, menteeUserObj);
     } else {
         await Notification.create({
           receiverId: connection.menteeId,
