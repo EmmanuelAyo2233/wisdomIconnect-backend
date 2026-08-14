@@ -23,9 +23,18 @@ const getAllMentors = async (req, res) => {
     // safe parser helper
     const safeParse = (val) => {
        if (!val) return [];
-       if (Array.isArray(val)) return val;
-       if (typeof val === 'string') {
-          try { return JSON.parse(val); } catch(e) { return [val]; }
+       let arr = [];
+       if (Array.isArray(val)) arr = val;
+       else if (typeof val === 'string') {
+          try { 
+            const parsed = JSON.parse(val);
+            arr = Array.isArray(parsed) ? parsed : [parsed];
+          } catch(e) { 
+            arr = val.split(',').map(s => s.trim()).filter(Boolean); 
+          }
+       }
+       if (Array.isArray(arr)) {
+          return arr.filter(item => typeof item === 'string' && !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://'));
        }
        return [];
     };

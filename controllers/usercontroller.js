@@ -6,13 +6,20 @@ const { bcrypt } = require("../config/reuseablePackages");
 
 // Helper to safely parse JSON or fallback to array
 const safeParseJSON = (value) => {
-  if (Array.isArray(value)) return value;
-  if (typeof value === 'object' && value !== null) return value;
-  try {
-    return value ? JSON.parse(value) : [];
-  } catch {
-    return [];
+  let parsed = [];
+  if (Array.isArray(value)) parsed = value;
+  else if (typeof value === 'object' && value !== null) parsed = value;
+  else {
+    try {
+      parsed = value ? JSON.parse(value) : [];
+    } catch {
+      parsed = typeof value === 'string' ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
+    }
   }
+  if (Array.isArray(parsed)) {
+    return parsed.filter(item => typeof item === 'string' && !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://'));
+  }
+  return parsed;
 };
 
 // --- Get user details ---
