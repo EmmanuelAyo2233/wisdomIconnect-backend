@@ -2,7 +2,7 @@ const { User, Mentee, Mentor, Appointment, Review, MentorCommendation, Achieveme
 const UserAchievement = require("../models/userAchievement");
 const { cloudinary } = require("../utils/cloudinary");
 const streamifier = require("streamifier");
-const { bcrypt } = require("../config/reuseablePackages");
+const { bcrypt, CLOUDINARY_FOLDER_NAME } = require("../config/reuseablePackages");
 
 // Helper to safely parse JSON or fallback to array
 const safeParseJSON = (value) => {

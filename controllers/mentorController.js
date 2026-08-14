@@ -55,6 +55,7 @@ const getAllMentors = async (req, res) => {
         },
         role: m.role || "Mentor",
         occupation: m.role || "Mentor",
+        isOnline: m.isOnline || false,
         expertise: safeParse(m.expertise),
         yearsOfExperience: m.yearsOfExperience || 0,
         attendance: m.attendance || "0%",
