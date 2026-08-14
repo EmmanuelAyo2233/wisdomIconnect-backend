@@ -1,4 +1,4 @@
-const Notification = require('../models/notification');
+const { User, Mentor, Mentee, Notification } = require('../models');
 const emailService = require('./emailService');
 const templates = require('../utils/emailTemplates');
 
@@ -11,10 +11,6 @@ class NotificationService {
    * Helper to robustly resolve User object (with email) and profileId (Mentor.id or Mentee.id).
    */
   async resolveUserAndProfile(target, type) {
-    const User = require('../models/user');
-    const Mentor = require('../models/mentor');
-    const Mentee = require('../models/mentee');
-
     let userRecord = null;
     let profileId = null;
 
@@ -120,15 +116,15 @@ class NotificationService {
   /**
    * General method to create a notification and optionally send an email.
    */
-  async sendNotification({ 
-    receiverId, 
+  async sendNotification({
+    receiverId,
     receiverType, // 'mentor' or 'mentee'
-    senderId = null, 
-    type = 'system', 
-    title, 
-    message, 
+    senderId = null,
+    type = 'system',
+    title,
+    message,
     link = null,
-    emailData = null 
+    emailData = null
   }) {
     try {
       // 1. Save In-App Notification to DB
@@ -209,7 +205,7 @@ class NotificationService {
   async sendMessageRequest(sender, receiver, receiverType = 'mentor') {
     const { user: senderUser, profileId: senderProfileId } = await this.resolveUserAndProfile(sender, receiverType === 'mentor' ? 'mentee' : 'mentor');
     const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, receiverType);
-    
+
     if (!receiverUser || !receiverUser.email) {
       console.error('❌ sendMessageRequest failed: Receiver email not found');
       return;

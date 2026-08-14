@@ -8,9 +8,12 @@
     jwt,
     Op,
   } = require("../config/reuseablePackages");
+  const { cloudinary } = require("../utils/cloudinary");
+  const streamFier = require("streamifier");
   const notificationService = require("../services/notificationService");
   const emailService = require("../services/emailService");
   const crypto = require("crypto");
+
 
   // ------- helpers -------
   const wordCount = (text = "") =>
