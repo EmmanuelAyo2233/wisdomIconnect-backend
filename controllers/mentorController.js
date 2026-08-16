@@ -25,16 +25,25 @@ const getAllMentors = async (req, res) => {
        if (!val) return [];
        let arr = [];
        if (Array.isArray(val)) arr = val;
+       else if (typeof val === 'object' && val !== null) arr = [val];
        else if (typeof val === 'string') {
           try { 
-            const parsed = JSON.parse(val);
+            let parsed = JSON.parse(val);
+            if (typeof parsed === 'string') {
+               try { parsed = JSON.parse(parsed); } catch(e) {}
+            }
             arr = Array.isArray(parsed) ? parsed : [parsed];
           } catch(e) { 
             arr = val.split(',').map(s => s.trim()).filter(Boolean); 
           }
        }
        if (Array.isArray(arr)) {
-          return arr.filter(item => typeof item === 'string' && !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://'));
+          return arr.filter(item => {
+             if (typeof item === 'string') {
+                return !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://');
+             }
+             return typeof item === 'object' && item !== null;
+          });
        }
        return [];
     };

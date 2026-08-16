@@ -126,7 +126,14 @@ const getMentorsDetails = async (req, res) => {
     const safeParseJSON = (val) => {
       if (!val) return [];
       if (Array.isArray(val)) return val;
-      try { const p = JSON.parse(val); return Array.isArray(p) ? p : []; } catch(e) { return []; }
+      if (typeof val === 'object' && val !== null) return [val];
+      try {
+        let p = JSON.parse(val);
+        if (typeof p === 'string') {
+          try { p = JSON.parse(p); } catch(e) {}
+        }
+        return Array.isArray(p) ? p : [p];
+      } catch(e) { return []; }
     };
 
     const profile = {

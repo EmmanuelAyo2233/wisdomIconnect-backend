@@ -12,12 +12,20 @@ const safeParseJSON = (value) => {
   else {
     try {
       parsed = value ? JSON.parse(value) : [];
+      if (typeof parsed === 'string') {
+        try { parsed = JSON.parse(parsed); } catch {}
+      }
     } catch {
       parsed = typeof value === 'string' ? value.split(',').map(s => s.trim()).filter(Boolean) : [];
     }
   }
   if (Array.isArray(parsed)) {
-    return parsed.filter(item => typeof item === 'string' && !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://'));
+    return parsed.filter(item => {
+      if (typeof item === 'string') {
+        return !item.startsWith('CERTIFICATE_URL_') && !item.startsWith('http://') && !item.startsWith('https://');
+      }
+      return typeof item === 'object' && item !== null;
+    });
   }
   return parsed;
 };
@@ -267,13 +275,13 @@ const updateDetails = async (req, res) => {
         mentor.slotBooked = body.slotBooked ?? mentor.slotBooked;
         mentor.phone = body.phone || mentor.phone;
         mentor.linkedinUrl = body.linkedinUrl || mentor.linkedinUrl || "";
-        mentor.expertise = JSON.stringify(body.expertise || safeParseJSON(mentor.expertise));
-        mentor.fluentIn = JSON.stringify(body.fluentIn || safeParseJSON(mentor.fluentIn));
-        mentor.discipline = JSON.stringify(body.disciplines || safeParseJSON(mentor.discipline));
-        mentor.industries = JSON.stringify(body.industries || safeParseJSON(mentor.industries));
-        mentor.education = JSON.stringify(body.education || safeParseJSON(mentor.education));
-        mentor.experience = JSON.stringify(body.experience || safeParseJSON(mentor.experience));
-        if (body.topics !== undefined) mentor.topics = JSON.stringify(body.topics);
+        if (body.expertise !== undefined) mentor.expertise = safeParseJSON(body.expertise);
+        if (body.fluentIn !== undefined) mentor.fluentIn = safeParseJSON(body.fluentIn);
+        if (body.disciplines !== undefined || body.discipline !== undefined) mentor.discipline = safeParseJSON(body.disciplines || body.discipline);
+        if (body.industries !== undefined) mentor.industries = safeParseJSON(body.industries);
+        if (body.education !== undefined) mentor.education = safeParseJSON(body.education);
+        if (body.experience !== undefined) mentor.experience = safeParseJSON(body.experience);
+        if (body.topics !== undefined) mentor.topics = safeParseJSON(body.topics);
         if (body.default_duration !== undefined) mentor.default_duration = parseInt(body.default_duration);
         if (body.sessionPrice !== undefined) mentor.sessionPrice = parseFloat(body.sessionPrice);
         mentor.startDate = body.startDate || mentor.startDate;
@@ -289,15 +297,13 @@ const updateDetails = async (req, res) => {
         mentee.role = body.occupation || body.role || mentee.role;
         mentee.phone = body.phone || mentee.phone;
         mentee.linkedinUrl = body.linkedinUrl || mentee.linkedinUrl || "";
-        mentee.fluentIn = JSON.stringify(body.fluentIn || safeParseJSON(mentee.fluentIn));
-        mentee.interest = JSON.stringify(body.interests || safeParseJSON(mentee.interest));
-        
-        // New fields
-        mentee.expertise = JSON.stringify(body.expertise || safeParseJSON(mentee.expertise));
-        mentee.discipline = JSON.stringify(body.disciplines || safeParseJSON(mentee.discipline));
-        mentee.industries = JSON.stringify(body.industries || safeParseJSON(mentee.industries));
-        mentee.experience = JSON.stringify(body.experience || safeParseJSON(mentee.experience));
-        mentee.education = JSON.stringify(body.education || safeParseJSON(mentee.education));
+        if (body.fluentIn !== undefined) mentee.fluentIn = safeParseJSON(body.fluentIn);
+        if (body.interests !== undefined || body.interest !== undefined) mentee.interest = safeParseJSON(body.interests || body.interest);
+        if (body.expertise !== undefined) mentee.expertise = safeParseJSON(body.expertise);
+        if (body.disciplines !== undefined || body.discipline !== undefined) mentee.discipline = safeParseJSON(body.disciplines || body.discipline);
+        if (body.industries !== undefined) mentee.industries = safeParseJSON(body.industries);
+        if (body.experience !== undefined) mentee.experience = safeParseJSON(body.experience);
+        if (body.education !== undefined) mentee.education = safeParseJSON(body.education);
 
         mentee.startDate = body.startDate || mentee.startDate;
         mentee.endDate = body.endDate || mentee.endDate;
