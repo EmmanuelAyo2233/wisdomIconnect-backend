@@ -27,6 +27,22 @@ const Withdrawal = sequelize.define(
             type: DataTypes.ENUM("pending", "completed", "failed"),
             defaultValue: "pending",
         },
+        bankName: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        accountNumber: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        accountName: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
+        reference: {
+            type: DataTypes.STRING,
+            allowNull: true,
+        },
     },
     {
         freezeTableName: true,

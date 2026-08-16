@@ -11,5 +11,7 @@ router.post('/wallet/withdraw', authentication, paymentController.withdrawFunds)
 router.get('/wallet', authentication, paymentController.getWallet);
 router.get('/wallet/admin', authentication, paymentController.getAdminWallet);
 router.get('/transactions', authentication, paymentController.getTransactions);
+router.post('/wallet/withdraw/:withdrawalId/approve', authentication, paymentController.approveWithdrawal);
+router.post('/wallet/withdraw/:withdrawalId/reject', authentication, paymentController.rejectWithdrawal);
 
 module.exports = router;

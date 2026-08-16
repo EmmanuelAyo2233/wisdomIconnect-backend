@@ -263,32 +263,46 @@ exports.requestRefund = async (req, res) => {
 
 exports.withdrawFunds = async (req, res) => {
     try {
-        const { amount } = req.body;
+        const { amount, bankName, accountNumber, accountName } = req.body;
         const userId = req.user.id; 
 
-        if (!amount || amount < 5000) return res.status(400).json({ success: false, message: "Minimum withdrawal is 5000 Naira" });
+        if (!amount || amount < 5000) return res.status(400).json({ success: false, message: "Minimum withdrawal amount is ₦5,000" });
+        if (!bankName || !accountNumber || !accountName) {
+            return res.status(400).json({ success: false, message: "Bank name, account number, and account name are required." });
+        }
+        if (accountNumber.replace(/\D/g, '').length < 10) {
+            return res.status(400).json({ success: false, message: "Please enter a valid 10-digit NUBAN account number." });
+        }
 
         const wallet = await Wallet.findOne({ where: { userId } });
         const mentor = await Mentor.findOne({ where: { user_id: userId } });
         
+        if (!mentor) {
+            return res.status(404).json({ success: false, message: "Mentor profile not found" });
+        }
         if (!wallet || wallet.availableBalance < amount) {
-            return res.status(400).json({ success: false, message: "Insufficient available balance" });
+            return res.status(400).json({ success: false, message: "Insufficient available balance for this withdrawal" });
         }
 
-        // Lock & Deduct
+        // Lock & Deduct available balance
         wallet.availableBalance -= amount;
         await wallet.save();
 
-        // Create Withdrawal (marked pending for admin processing / payout verification)
-        await Withdrawal.create({
+        const reference = `WD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
+
+        // Create Withdrawal record with bank details
+        const withdrawal = await Withdrawal.create({
              mentorId: mentor.id,
              amount,
+             bankName: bankName.trim(),
+             accountNumber: accountNumber.trim(),
+             accountName: accountName.trim(),
+             reference,
              status: 'pending'
         });
 
         const user = await User.findByPk(userId);
         if (user) {
-            // Build a notification receiver using the mentor profile ID for in-app notification
             const mentorProfile = {
                 id:        mentor ? mentor.id : userId,
                 email:     user.email,
@@ -300,20 +314,29 @@ exports.withdrawFunds = async (req, res) => {
 
         logActivity({
             type: "PAYMENT",
-            message: `Mentor initiated a withdrawal of ₦${amount.toLocaleString()}`,
+            message: `Mentor initiated a withdrawal of ₦${amount.toLocaleString()} to ${bankName.trim()} (${accountNumber.trim()})`,
             userId: userId,
             targetId: mentor.id,
             status: "success",
             metadata: {
                 amount,
+                bankName,
+                accountNumber,
+                accountName,
+                reference,
                 newBalance: wallet.availableBalance
             }
         });
 
-        res.status(200).json({ success: true, message: "Withdrawal successful", newBalance: wallet.availableBalance });
+        res.status(200).json({ 
+            success: true, 
+            message: `Withdrawal request for ₦${amount.toLocaleString()} submitted! Funds will be verified and transferred to your bank account within 24 to 48 business hours.`, 
+            newBalance: wallet.availableBalance,
+            withdrawal
+        });
     } catch (err) {
         console.error("Withdrawal error:", err);
-        res.status(500).json({ success: false, message: "Server error during withdrawal" });
+        res.status(500).json({ success: false, message: "Server error during withdrawal request" });
     }
 };
 
@@ -327,16 +350,81 @@ exports.getWallet = async (req, res) => {
         let transactions = [];
         let withdrawals = [];
         if (mentor) {
-            const appointments = await Appointment.findAll({ where: { mentorId: mentor.id }, attributes: ['id'] });
+            const appointments = await Appointment.findAll({ 
+                where: { mentorId: mentor.id }, 
+                attributes: ['id'] 
+            });
             const appointmentIds = appointments.map(a => a.id);
-            transactions = await Payment.findAll({ where: { appointmentId: appointmentIds }, order: [['createdAt', 'DESC']] });
-            withdrawals = await Withdrawal.findAll({ where: { mentorId: mentor.id }, order: [['createdAt', 'DESC']] });
+            transactions = await Payment.findAll({ 
+                where: { appointmentId: appointmentIds }, 
+                include: [{
+                    model: Appointment,
+                    as: 'appointment',
+                    include: [{
+                        model: Mentee,
+                        as: 'mentee',
+                        include: [{ model: User, as: 'user', attributes: ['id', 'name', 'picture', 'email'] }]
+                    }]
+                }],
+                order: [['createdAt', 'DESC']] 
+            });
+            withdrawals = await Withdrawal.findAll({ 
+                where: { mentorId: mentor.id }, 
+                order: [['createdAt', 'DESC']] 
+            });
         }
 
         res.status(200).json({ success: true, wallet, transactions, withdrawals });
     } catch (err) {
         console.error("Get Wallet error:", err);
         res.status(500).json({ success: false, message: "Server error fetching wallet" });
+    }
+};
+
+exports.approveWithdrawal = async (req, res) => {
+    try {
+        if (req.user.userType !== 'admin') return res.status(403).json({ success: false, message: "Forbidden" });
+        const { withdrawalId } = req.params;
+        const withdrawal = await Withdrawal.findByPk(withdrawalId, { include: [{ model: Mentor, as: 'mentor' }] });
+        if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal record not found" });
+
+        withdrawal.status = 'completed';
+        await withdrawal.save();
+
+        res.status(200).json({ success: true, message: "Withdrawal marked as completed/paid out.", withdrawal });
+    } catch (err) {
+        console.error("Approve withdrawal error:", err);
+        res.status(500).json({ success: false, message: "Server error approving withdrawal" });
+    }
+};
+
+exports.rejectWithdrawal = async (req, res) => {
+    try {
+        if (req.user.userType !== 'admin') return res.status(403).json({ success: false, message: "Forbidden" });
+        const { withdrawalId } = req.params;
+        const withdrawal = await Withdrawal.findByPk(withdrawalId, { include: [{ model: Mentor, as: 'mentor' }] });
+        if (!withdrawal) return res.status(404).json({ success: false, message: "Withdrawal record not found" });
+
+        if (withdrawal.status === 'completed') {
+            return res.status(400).json({ success: false, message: "Cannot reject an already completed withdrawal" });
+        }
+
+        withdrawal.status = 'failed';
+        await withdrawal.save();
+
+        // Refund available balance back to mentor
+        if (withdrawal.mentor) {
+            const wallet = await Wallet.findOne({ where: { userId: withdrawal.mentor.user_id } });
+            if (wallet) {
+                wallet.availableBalance += withdrawal.amount;
+                await wallet.save();
+            }
+        }
+
+        res.status(200).json({ success: true, message: "Withdrawal rejected and amount refunded to mentor wallet.", withdrawal });
+    } catch (err) {
+        console.error("Reject withdrawal error:", err);
+        res.status(500).json({ success: false, message: "Server error rejecting withdrawal" });
     }
 };
 
