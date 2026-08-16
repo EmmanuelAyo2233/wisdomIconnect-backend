@@ -9,10 +9,14 @@ const {
     changePassword,
     changeEmail,
     updateMentorSettings,
+    getMenteePublicProfile,
 } = require("../controllers/usercontroller");
 const { authentication } = require("../controllers/authcontrollers");
 
 const router = express.Router();
+
+// Mentee public profile (must be before /me routes to avoid conflict)
+router.route("/mentee/:id").get(authentication, getMenteePublicProfile);
 
 // Get / update user details
 router.route("/me").get(authentication, getdetails);

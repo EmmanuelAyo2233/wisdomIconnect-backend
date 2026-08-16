@@ -510,6 +510,136 @@ const updateMentorSettings = async (req, res) => {
   }
 };
 
+// ── Mentee Public Profile (GET /api/v1/user/mentee/:id) ──
+const getMenteePublicProfile = async (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ status: "fail", message: "Mentee ID is required" });
+
+    // Try finding by Mentee.id first, then by user_id
+    let mentee = await Mentee.findByPk(id, {
+      include: [{ model: User, as: "user", attributes: ["id", "name", "email", "picture", "status", "userType", "countryCode"] }],
+    });
+    if (!mentee) {
+      mentee = await Mentee.findOne({
+        where: { user_id: id },
+        include: [{ model: User, as: "user", attributes: ["id", "name", "email", "picture", "status", "userType", "countryCode"] }],
+      });
+    }
+    if (!mentee) return res.status(404).json({ status: "fail", message: "Mentee not found" });
+
+    // Privacy check
+    let privacySettings = {};
+    if (mentee.privacySettings) {
+      try {
+        privacySettings = typeof mentee.privacySettings === 'string' ? JSON.parse(mentee.privacySettings) : mentee.privacySettings;
+      } catch (e) { privacySettings = {}; }
+    }
+    const isOwner = req.user?.id === mentee.user_id;
+    if (!isOwner && privacySettings.profileVisibility === 'private') {
+      return res.status(403).json({ status: "fail", message: "This mentee's profile is private." });
+    }
+
+    // Journey stats from appointments
+    const appointments = await Appointment.findAll({ where: { menteeId: mentee.id } });
+    let minutesLearned = 0;
+    let sessionsAttended = 0;
+    let scheduledCount = 0;
+
+    appointments.forEach(app => {
+      if (app.status === 'completed' || app.status === 'accepted') scheduledCount++;
+      if (app.status === 'completed') {
+        sessionsAttended++;
+        minutesLearned += app.duration || 60;
+      }
+    });
+    const attendanceRate = scheduledCount > 0 ? Math.round((sessionsAttended / scheduledCount) * 100) : 0;
+
+    // Commendations written by mentors about this mentee
+    let commendations = [];
+    try {
+      commendations = await MentorCommendation.findAll({
+        where: { menteeId: mentee.id, isHidden: false },
+        include: [
+          {
+            model: Mentor,
+            as: "mentor",
+            include: [{ model: User, as: "user", attributes: ["id", "name", "picture"] }]
+          }
+        ],
+        order: [["createdAt", "DESC"]]
+      });
+    } catch (e) {
+      console.error("Error fetching commendations:", e.message);
+    }
+
+    // Achievements
+    let achievementsList = [];
+    try {
+      if (isOwner || privacySettings.showAchievements !== false) {
+        const userAchievements = await UserAchievement.findAll({
+          where: { user_id: mentee.user_id, role: "mentee" },
+          include: [{ model: Achievement, as: "achievement" }]
+        });
+        achievementsList = userAchievements.map(ua => ({
+          id: ua.id,
+          title: ua.achievement?.title,
+          description: ua.achievement?.description,
+          icon: ua.achievement?.icon,
+          criteria_type: ua.achievement?.criteria_type,
+          earned_at: ua.earned_at
+        }));
+      }
+    } catch (e) {
+      console.error("Error fetching achievements:", e.message);
+    }
+
+    const safeParse = (val) => {
+      if (!val) return [];
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'string') {
+        try { return JSON.parse(val); } catch(e) { return [val]; }
+      }
+      return [];
+    };
+
+    const profile = {
+      id: mentee.id,
+      user_id: mentee.user_id,
+      name: mentee.user?.name || "Unknown",
+      email: mentee.user?.email || "",
+      picture: mentee.user?.picture || "",
+      status: mentee.user?.status || "",
+      userType: mentee.user?.userType || "mentee",
+      countryCode: mentee.user?.countryCode || "NG",
+      role: mentee.role || "Mentee",
+      occupation: mentee.role || "Mentee",
+      bio: mentee.bio || "",
+      linkedinUrl: mentee.linkedinUrl || "",
+      interest: safeParse(mentee.interest),
+      interests: safeParse(mentee.interest),
+      expertise: safeParse(mentee.expertise),
+      discipline: safeParse(mentee.discipline),
+      industries: safeParse(mentee.industries),
+      fluentIn: safeParse(mentee.fluentIn),
+      experience: safeParse(mentee.experience),
+      education: safeParse(mentee.education),
+      impact: {
+        minutesLearned,
+        sessionsAttended,
+        attendanceRate,
+      },
+      commendations,
+      achievements: achievementsList,
+    };
+
+    res.status(200).json({ status: "success", data: profile });
+  } catch (err) {
+    console.error("❌ Error fetching mentee public profile:", err);
+    res.status(500).json({ status: "fail", message: "Server error" });
+  }
+};
+
 module.exports = {
   getdetails,
   updateDetails,
@@ -519,4 +649,5 @@ module.exports = {
   changePassword,
   changeEmail,
   updateMentorSettings,
+  getMenteePublicProfile,
 };
