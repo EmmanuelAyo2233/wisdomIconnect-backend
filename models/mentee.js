@@ -37,4 +37,8 @@ const Mentee = sequelize.define(
     }
 );
 
+const User = require("./user");
+
+Mentee.belongsTo(User, { foreignKey: "user_id", as: "user" });
+
 module.exports = Mentee;

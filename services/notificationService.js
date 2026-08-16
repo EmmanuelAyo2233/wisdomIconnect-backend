@@ -83,23 +83,28 @@ class NotificationService {
   }
 
   /**
-   * Helper to parse string or object sessionDetails into topic & dateTime strings.
+   * Helper to parse string or object sessionDetails into topic, dateTime & goals strings.
    */
   parseSessionDetails(sessionDetails) {
     let topic = 'Mentorship Session';
     let dateTime = '';
+    let goals = '';
 
-    if (!sessionDetails) return { topic, dateTime };
+    if (!sessionDetails) return { topic, dateTime, goals };
 
     if (typeof sessionDetails === 'object') {
       topic = sessionDetails.topic || sessionDetails.sessionTitle || 'Mentorship Session';
       dateTime = sessionDetails.dateTime || `${sessionDetails.date || ''} ${sessionDetails.startTime || ''}`.trim();
+      goals = sessionDetails.goals || sessionDetails.specificObjectives || sessionDetails.objectives || sessionDetails.notes || '';
     } else if (typeof sessionDetails === 'string') {
       const lines = sessionDetails.split('\n');
       let datePart = '', timePart = '';
       lines.forEach(line => {
         const lower = line.toLowerCase();
         if (lower.startsWith('topic:')) topic = line.substring(line.indexOf(':') + 1).trim();
+        if (lower.startsWith('goals:') || lower.startsWith('objectives:') || lower.startsWith('specific objectives:')) {
+          goals = line.substring(line.indexOf(':') + 1).trim();
+        }
         if (lower.startsWith('date:')) datePart = line.substring(line.indexOf(':') + 1).trim();
         if (lower.startsWith('time:')) timePart = line.substring(line.indexOf(':') + 1).trim();
       });
@@ -110,7 +115,7 @@ class NotificationService {
       }
     }
 
-    return { topic, dateTime };
+    return { topic, dateTime, goals };
   }
 
   /**
@@ -333,7 +338,7 @@ class NotificationService {
     const menteeName = menteeUser ? (menteeUser.firstName || menteeUser.name) : 'A Mentee';
     const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Mentor';
 
-    const { topic, dateTime } = this.parseSessionDetails(sessionDetails);
+    const { topic, dateTime, goals } = this.parseSessionDetails(sessionDetails);
 
     // 1. Notify Mentor (In-app + Email)
     if (mentorUser && mentorUser.email) {
@@ -344,12 +349,12 @@ class NotificationService {
         senderId: menteeProfileId || (menteeUser ? menteeUser.id : null),
         type: 'booking',
         title: 'New Booking Request',
-        message: `${menteeName} has requested a mentorship session with you.`,
+        message: `${menteeName} has requested a mentorship session with you.${goals ? ` Specific Objectives: ${goals}` : ''}`,
         link: '/mentor/bookings',
         emailData: {
           to: mentorUser.email,
           subject: 'New Booking Request Received',
-          html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl)
+          html: templates.bookingRequestSent(mentorName, menteeName, topic, dateTime, dashboardUrl, goals)
         }
       });
     } else {
@@ -391,7 +396,7 @@ class NotificationService {
     const menteeName = menteeUser.firstName || menteeUser.name || 'Mentee';
     const mentorName = mentorUser ? (mentorUser.firstName || mentorUser.name) : 'Your Mentor';
 
-    const { topic, dateTime } = this.parseSessionDetails(sessionDetails);
+    const { topic, dateTime, goals } = this.parseSessionDetails(sessionDetails);
 
     await this.sendNotification({
       receiverId: menteeProfileId || menteeUser.id,
@@ -404,7 +409,7 @@ class NotificationService {
       emailData: {
         to: menteeUser.email,
         subject: 'Session Booking Confirmed!',
-        html: templates.bookingAccepted(menteeName, mentorName, topic, dateTime, joinUrl)
+        html: templates.bookingAccepted(menteeName, mentorName, topic, dateTime, joinUrl, goals)
       }
     });
   }

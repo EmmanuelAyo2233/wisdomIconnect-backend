@@ -220,7 +220,7 @@ exports.bookAppointment = async (req, res) => {
       notificationService.sendBookingAccepted(
         menteeUserObj, 
         mentorUserObj, 
-        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`, 
+        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}${goals ? `\nGoals: ${goals}` : ''}`, 
         `/call/${meetingId}`
       ).catch(console.error);
 
@@ -232,7 +232,7 @@ exports.bookAppointment = async (req, res) => {
           senderId: mentee.id,
           type: 'booking',
           title: 'New Session Booked (Auto-Accepted)',
-          message: `${actingName} has booked a session with you on ${date} at ${startTime}.${paymentText}`,
+          message: `${actingName} has booked a session with you on ${date} at ${startTime}.${paymentText}${goals ? ` Objectives: ${goals}` : ''}`,
           link: '/mentor/bookings',
           emailData: {
             to: mentorUserObj.email,
@@ -242,7 +242,8 @@ exports.bookAppointment = async (req, res) => {
               actingName,
               topic,
               `${date} ${startTime}`,
-              `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentor/bookings`
+              `${process.env.FRONTEND_URL || 'https://wisdom-iconnect.vercel.app'}/mentor/bookings`,
+              goals
             )
           }
         }).catch(console.error);
@@ -252,7 +253,7 @@ exports.bookAppointment = async (req, res) => {
       notificationService.sendBookingRequest(
         menteeUserObj, 
         mentorUserObj, 
-        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}`
+        `Date: ${date}\nTime: ${startTime}\nTopic: ${topic}${goals ? `\nGoals: ${goals}` : ''}`
       ).catch(console.error);
     }
 
@@ -705,7 +706,7 @@ exports.acceptAppointment = async (req, res) => {
       notificationService.sendBookingAccepted(
         menteeUser, 
         mentorUserObj, 
-        `Date: ${appointment.date}\nTime: ${appointment.startTime}\nTopic: ${appointment.topic || 'Mentorship Session'}`, 
+        `Date: ${appointment.date}\nTime: ${appointment.startTime}\nTopic: ${appointment.topic || 'Mentorship Session'}${appointment.goals ? `\nGoals: ${appointment.goals}` : ''}`, 
         appointment.meetingLink
       ).catch(console.error);
     }

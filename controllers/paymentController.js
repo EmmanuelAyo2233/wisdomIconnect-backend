@@ -350,34 +350,56 @@ exports.getWallet = async (req, res) => {
         let transactions = [];
         let withdrawals = [];
         if (mentor) {
-            const appointments = await Appointment.findAll({ 
-                where: { mentorId: mentor.id }, 
-                attributes: ['id'] 
-            });
-            const appointmentIds = appointments.map(a => a.id);
-            transactions = await Payment.findAll({ 
-                where: { appointmentId: appointmentIds }, 
-                include: [{
-                    model: Appointment,
-                    as: 'appointment',
-                    include: [{
-                        model: Mentee,
-                        as: 'mentee',
-                        include: [{ model: User, as: 'user', attributes: ['id', 'name', 'picture', 'email'] }]
-                    }]
-                }],
-                order: [['createdAt', 'DESC']] 
-            });
-            withdrawals = await Withdrawal.findAll({ 
-                where: { mentorId: mentor.id }, 
-                order: [['createdAt', 'DESC']] 
-            });
+            try {
+                const appointments = await Appointment.findAll({ 
+                    where: { mentorId: mentor.id }, 
+                    attributes: ['id'] 
+                });
+                const appointmentIds = appointments.map(a => a.id);
+
+                if (appointmentIds && appointmentIds.length > 0) {
+                    try {
+                        transactions = await Payment.findAll({ 
+                            where: { appointmentId: appointmentIds }, 
+                            include: [{
+                                model: Appointment,
+                                as: 'appointment',
+                                include: [{
+                                    model: Mentee,
+                                    as: 'mentee',
+                                    include: [{ model: User, as: 'user', attributes: ['id', 'name', 'picture', 'email'] }]
+                                }]
+                            }],
+                            order: [['createdAt', 'DESC']] 
+                        });
+                    } catch (txIncErr) {
+                        console.warn("Get Wallet transactions nested include failed, falling back to basic query:", txIncErr.message);
+                        transactions = await Payment.findAll({ 
+                            where: { appointmentId: appointmentIds }, 
+                            order: [['createdAt', 'DESC']] 
+                        });
+                    }
+                }
+            } catch (txErr) {
+                console.error("Error fetching mentor transactions:", txErr.message);
+                transactions = [];
+            }
+
+            try {
+                withdrawals = await Withdrawal.findAll({ 
+                    where: { mentorId: mentor.id }, 
+                    order: [['createdAt', 'DESC']] 
+                });
+            } catch (wdErr) {
+                console.error("Error fetching mentor withdrawals:", wdErr.message);
+                withdrawals = [];
+            }
         }
 
         res.status(200).json({ success: true, wallet, transactions, withdrawals });
     } catch (err) {
         console.error("Get Wallet error:", err);
-        res.status(500).json({ success: false, message: "Server error fetching wallet" });
+        res.status(500).json({ success: false, message: "Server error fetching wallet", error: err.message });
     }
 };
 
@@ -432,28 +454,42 @@ exports.getAdminWallet = async (req, res) => {
     try {
         if (req.user.userType !== 'admin') return res.status(403).json({ success: false, message: "Forbidden" });
         const wallet = await getPlatformAdminWallet();
-        const transactions = await Payment.findAll({ 
-            order: [['createdAt', 'DESC']], 
-            limit: 100,
-            include: [{
-                model: Appointment,
-                as: 'appointment',
+        let transactions = [];
+        let allWithdrawals = [];
+        try {
+            transactions = await Payment.findAll({ 
+                order: [['createdAt', 'DESC']], 
+                limit: 100,
                 include: [{
-                    model: Mentor,
-                    as: 'mentor',
+                    model: Appointment,
+                    as: 'appointment',
                     include: [{
-                        model: User,
-                        as: 'user',
-                        attributes: ['id', 'name', 'picture']
+                        model: Mentor,
+                        as: 'mentor',
+                        include: [{
+                            model: User,
+                            as: 'user',
+                            attributes: ['id', 'name', 'picture']
+                        }]
                     }]
                 }]
-            }]
-        });
-        const allWithdrawals = await Withdrawal.findAll({ order: [['createdAt', 'DESC']], include: ['mentor'] });
+            });
+        } catch (txErr) {
+            console.warn("Get Admin Wallet transactions include failed, falling back to basic query:", txErr.message);
+            transactions = await Payment.findAll({ order: [['createdAt', 'DESC']], limit: 100 });
+        }
+
+        try {
+            allWithdrawals = await Withdrawal.findAll({ order: [['createdAt', 'DESC']] });
+        } catch (wdErr) {
+            console.warn("Get Admin Wallet withdrawals query failed:", wdErr.message);
+            allWithdrawals = [];
+        }
 
         res.status(200).json({ success: true, wallet, transactions, allWithdrawals });
     } catch (err) {
-        res.status(500).json({ success: false, message: "Server error" });
+        console.error("Get Admin Wallet error:", err);
+        res.status(500).json({ success: false, message: "Server error", error: err.message });
     }
 };
 

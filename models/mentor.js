@@ -156,5 +156,9 @@ const Mentor = sequelize.define(
     }
 );
 
+const User = require("./user");
+
+Mentor.belongsTo(User, { foreignKey: "user_id", as: "user" });
+
 module.exports = Mentor;
     

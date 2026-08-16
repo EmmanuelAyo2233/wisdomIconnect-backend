@@ -247,7 +247,7 @@ module.exports = {
   ),
 
   // 10. Booking Request Sent (to Mentor)
-  bookingRequestSent: (mentorName, menteeName, sessionTitle, dateTime, dashboardUrl) => createBaseTemplate(
+  bookingRequestSent: (mentorName, menteeName, sessionTitle, dateTime, dashboardUrl, goals) => createBaseTemplate(
     'New Booking Request Received',
     `${menteeName} has requested a mentorship session with you.`,
     `<div class="badge">New Session Request</div>
@@ -263,7 +263,12 @@ module.exports = {
             <span class="card-label">Topic / Session:</span>
             <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
         </div>
-        <div class="card-row">
+        ${goals ? `
+        <div class="card-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; flex-direction: column; align-items: flex-start; text-align: left;">
+            <span class="card-label" style="display: block; margin-bottom: 6px; font-weight: bold; color: #1e293b;">Specific Objectives / Mentee Goals:</span>
+            <span class="card-value" style="display: block; text-align: left; background: #f8fafc; padding: 12px; border-radius: 8px; color: #334155; border-left: 4px solid #b22222; font-size: 13px; line-height: 1.5; width: 100%;">"${goals}"</span>
+        </div>` : ''}
+        <div class="card-row" style="margin-top: 10px;">
             <span class="card-label">Date & Time:</span>
             <span class="card-value">${dateTime}</span>
         </div>
@@ -277,7 +282,7 @@ module.exports = {
   ),
 
   // 10. Booking Accepted (to Mentee)
-  bookingAccepted: (menteeName, mentorName, sessionTitle, dateTime, joinUrl) => createBaseTemplate(
+  bookingAccepted: (menteeName, mentorName, sessionTitle, dateTime, joinUrl, goals) => createBaseTemplate(
     'Session Confirmed!',
     `Your session with ${mentorName} is confirmed.`,
     `<div class="badge badge-success">Booking Confirmed</div>
@@ -293,7 +298,12 @@ module.exports = {
             <span class="card-label">Session Topic:</span>
             <span class="card-value">${sessionTitle || 'Mentorship Session'}</span>
         </div>
-        <div class="card-row">
+        ${goals ? `
+        <div class="card-row" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e2e8f0; flex-direction: column; align-items: flex-start; text-align: left;">
+            <span class="card-label" style="display: block; margin-bottom: 6px; font-weight: bold; color: #1e293b;">Specific Objectives:</span>
+            <span class="card-value" style="display: block; text-align: left; background: #f8fafc; padding: 12px; border-radius: 8px; color: #334155; border-left: 4px solid #10b981; font-size: 13px; line-height: 1.5; width: 100%;">"${goals}"</span>
+        </div>` : ''}
+        <div class="card-row" style="margin-top: 10px;">
             <span class="card-label">Date & Time:</span>
             <span class="card-value">${dateTime}</span>
         </div>
