@@ -91,7 +91,7 @@ const io = new Server(server, {
             "http://127.0.0.1:5173",
             "http://localhost:5173",
             "https://wisdom-iconnect.vercel.app",
-            "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
+            "https://wisdom-iconnect-64aajq8h9-emmanuels-projects-8000beb3.vercel.app",
             /\.vercel\.app$/, // Allows any Vercel preview branch
             FRONTEND_URL,
         ],
@@ -156,29 +156,29 @@ const platformSettingRoutes = require("./routes/platformSettingRoutes");
 app.use(`${API_URL}/settings`, platformSettingRoutes);
 
 app.get("/test-notifications", (req, res) => {
-  res.json({ message: "Notifications route is alive ✅" });
+    res.json({ message: "Notifications route is alive ✅" });
 });
 
 app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "ok",
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString()
-  });
+    res.status(200).json({
+        status: "ok",
+        uptime: Math.floor(process.uptime()),
+        timestamp: new Date().toISOString()
+    });
 });
 
 // --- Global Error Handling Middleware ---
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err);
-  const statusCode = err.statusCode || 500;
-  const response = {
-    status: "fail",
-    message: err.message || "Internal server error"
-  };
-  if (process.env.NODE_ENV !== "production" && err.stack) {
-    response.stack = err.stack;
-  }
-  res.status(statusCode).json(response);
+    console.error("Unhandled error:", err);
+    const statusCode = err.statusCode || 500;
+    const response = {
+        status: "fail",
+        message: err.message || "Internal server error"
+    };
+    if (process.env.NODE_ENV !== "production" && err.stack) {
+        response.stack = err.stack;
+    }
+    res.status(statusCode).json(response);
 });
 
 
@@ -191,7 +191,7 @@ setupCallSocket(io);
 
 // --- Swagger Documentation ---
 autoSwaggerJs({
-    app,    
+    app,
     version: "1.0.0",
     description: "Wisdom Connect API documentation and testing",
     title: "Wisdom Connect API",
@@ -218,7 +218,7 @@ autoSwaggerJs({
 db.sequelize.sync() // creates missing tables but avoids complex alterations to existing ones
     .then(async () => {
         console.log("✅ Database synchronized successfully (Tables created/updated)");
-        
+
         // Safely add missing column to user table without alter: true which breaks on unique constraints
         try {
             await db.sequelize.query("ALTER TABLE `user` ADD COLUMN `accountStatus` ENUM('active', 'suspended', 'banned') DEFAULT 'active';");
