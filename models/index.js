@@ -36,6 +36,7 @@ const PlatformSetting = require("./platformSetting");
 const AdminLog = require("./adminLog");
 const Activity = require("./activity");
 const MentorKyc = require("./mentorKyc");
+const Waitlist = require("./waitlist");
 
 const sequelize = require("../config/db");
 
@@ -218,4 +219,5 @@ module.exports = {
     AdminLog,
     Activity,
     MentorKyc,
+    Waitlist,
 };

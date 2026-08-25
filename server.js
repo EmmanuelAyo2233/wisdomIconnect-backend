@@ -155,6 +155,9 @@ app.use(`${API_URL}/announcements`, announcementRoutes);
 const platformSettingRoutes = require("./routes/platformSettingRoutes");
 app.use(`${API_URL}/settings`, platformSettingRoutes);
 
+const waitlistRoutes = require("./routes/waitlistRoutes");
+app.use(`${API_URL}/waitlist`, waitlistRoutes);
+
 app.get("/test-notifications", (req, res) => {
     res.json({ message: "Notifications route is alive ✅" });
 });
