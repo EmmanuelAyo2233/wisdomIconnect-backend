@@ -49,8 +49,8 @@ exports.createAvailability = async (req, res) => {
     const selectedDate = new Date(date);
     selectedDate.setHours(0, 0, 0, 0);
 
-    if (selectedDate.getTime() <= today.getTime()) {
-      return res.status(400).json({ message: "Availability must be set for strictly future dates! Today cannot be booked. ❌" });
+    if (selectedDate.getTime() < today.getTime()) {
+      return res.status(400).json({ message: "Availability cannot be set for past dates! ❌" });
     }
 
     // Time Splitting Engine
@@ -132,14 +132,14 @@ exports.getMentorAvailability = async (req, res) => {
       order: [["date", "ASC"]],
     });
 
-    // 🧠 Filter out past and current dates
+    // 🧠 Filter out past dates (allow today and future)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const upcomingSlots = slots.filter((slot) => {
       const slotDate = new Date(slot.date);
       slotDate.setHours(0, 0, 0, 0);
-      return slot.status === "available" && slotDate > today;
+      return slot.status === "available" && slotDate >= today;
     });
 
     return res.status(200).json({
@@ -257,7 +257,7 @@ exports.getAvailabilityByMentorId = async (req, res) => {
          return false;
       }
       
-      return slot.status === "available" && slotDate > today;
+      return slot.status === "available" && slotDate >= today;
     });
 
     if (!availableFutureSlots.length) {

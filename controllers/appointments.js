@@ -92,14 +92,14 @@ exports.bookAppointment = async (req, res) => {
        }
     }
 
-    // ⛔ Date Validation: Must be future date
+    // ⛔ Date Validation: Cannot be in the past (today and future dates allowed)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const bookingDate = new Date(date);
     bookingDate.setHours(0, 0, 0, 0);
 
-    if (bookingDate.getTime() <= today.getTime()) {
-      return res.status(400).json({ status: "fail", message: "Bookings must be strictly for future dates ❌" });
+    if (bookingDate.getTime() < today.getTime()) {
+      return res.status(400).json({ status: "fail", message: "Bookings cannot be in the past ❌" });
     }
 
     // ⛔ Enforce Pricing Validation at Booking
