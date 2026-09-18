@@ -104,13 +104,15 @@ async function performSessionCompletion(appointment, completionMethod = 'automat
     // Mentor progression update
     const mentor = await Mentor.findByPk(appointment.mentorId, { include: ["user"] });
     if (mentor && mentor.user) {
-        mentor.user.sessionsCompleted = (mentor.user.sessionsCompleted || 0) + 1;
+        // Use real DB count to avoid stale cached value
+        const realSessionsCount = await Appointment.count({ where: { mentorId: mentor.id, status: 'completed' } });
+        mentor.user.sessionsCompleted = realSessionsCount;
 
-        // Upgrade logic
-        if (mentor.user.sessionsCompleted >= 50 && mentor.user.rating >= 4.5) {
+        // Upgrade logic — never downgrade, only upgrade
+        if (realSessionsCount >= 50 && mentor.user.rating >= 4.5) {
             mentor.user.mentorLevel = "gold";
-        } else if (mentor.user.sessionsCompleted >= 10 && mentor.user.rating >= 4.0) {
-            mentor.user.mentorLevel = "verified";
+        } else if (realSessionsCount >= 10 && mentor.user.rating >= 4.0) {
+            if (mentor.user.mentorLevel !== "gold") mentor.user.mentorLevel = "verified";
         }
         await mentor.user.save();
 
@@ -514,14 +516,18 @@ exports.submitReview = async (req, res) => {
             if (mentor && mentor.user) {
                 mentor.user.rating = roundedRating;
 
-                // Re-evaluate level
-                if (mentor.user.sessionsCompleted >= 50 && mentor.user.rating >= 4.5) {
+                // Use real DB count — NEVER trust the cached sessionsCompleted field here
+                // The old code was resetting mentors to "starter" when sessionsCompleted was stale
+                const realSessionsCount = await Appointment.count({ where: { mentorId: mentor.id, status: 'completed' } });
+                mentor.user.sessionsCompleted = realSessionsCount;
+
+                // Re-evaluate level — never downgrade, only upgrade
+                if (realSessionsCount >= 50 && roundedRating >= 4.5) {
                     mentor.user.mentorLevel = "gold";
-                } else if (mentor.user.sessionsCompleted >= 10 && mentor.user.rating >= 4.0) {
-                    mentor.user.mentorLevel = "verified";
-                } else {
-                    mentor.user.mentorLevel = "starter";
+                } else if (realSessionsCount >= 10 && roundedRating >= 4.0) {
+                    if (mentor.user.mentorLevel !== "gold") mentor.user.mentorLevel = "verified";
                 }
+                // ⛔ No else-branch: never reset to starter once promoted
                 await mentor.user.save();
             }
         }

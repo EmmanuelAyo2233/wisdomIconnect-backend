@@ -42,4 +42,7 @@ router.put("/disputes/:appointmentId/resolve", adminController.resolveDispute);
 router.get("/activity", adminController.getActivities);
 router.get("/activity/recent", adminController.getRecentActivities);
 
+// 🔧 One-time (and ongoing) sync: fix mentors stuck on starter
+router.post("/sync-mentor-levels", adminController.syncMentorLevels);
+
 module.exports = router;

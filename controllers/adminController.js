@@ -967,4 +967,66 @@ exports.getRecentActivities = async (req, res) => {
     res.status(500).json({ success: false, message: "Failed to fetch recent activities", error: error.message });
   }
 };
+// ---------------------------------------------------------------
+// 🔧 Sync Mentor Levels — fixes mentors stuck on "starter"
+//    due to stale sessionsCompleted field
+// POST /api/admin/sync-mentor-levels
+// ---------------------------------------------------------------
+exports.syncMentorLevels = async (req, res) => {
+  try {
+    const mentors = await Mentor.findAll({ include: ["user"] });
+    let updated = 0;
+    const results = [];
+
+    for (const mentor of mentors) {
+      if (!mentor.user) continue;
+
+      const realCount = await Appointment.count({
+        where: { mentorId: mentor.id, status: "completed" }
+      });
+
+      const allReviews = await Review.findAll({
+        where: { mentorId: mentor.id, isHidden: false }
+      });
+      const avgRating = allReviews.length > 0
+        ? Number((allReviews.reduce((sum, r) => sum + r.rating, 0) / allReviews.length).toFixed(1))
+        : (mentor.user.rating || 0);
+
+      // Determine correct level — never downgrade from gold
+      let correctLevel = mentor.user.mentorLevel;
+      if (realCount >= 50 && avgRating >= 4.5) {
+        correctLevel = "gold";
+      } else if (realCount >= 10 && avgRating >= 4.0) {
+        if (correctLevel !== "gold") correctLevel = "verified";
+      }
+      // No else: keep current level, don't reset to starter
+
+      const oldSessions = mentor.user.sessionsCompleted;
+      const oldLevel = mentor.user.mentorLevel;
+
+      mentor.user.sessionsCompleted = realCount;
+      mentor.user.rating = avgRating;
+      mentor.user.mentorLevel = correctLevel;
+      await mentor.user.save();
+      updated++;
+
+      results.push({
+        mentorId: mentor.id,
+        name: mentor.user.name,
+        sessionsCompleted: { before: oldSessions, after: realCount },
+        rating: avgRating,
+        mentorLevel: { before: oldLevel, after: correctLevel },
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `✅ Synced ${updated} mentors`,
+      results,
+    });
+  } catch (error) {
+    console.error("Error in syncMentorLevels:", error);
+    res.status(500).json({ success: false, message: "Sync failed", error: error.message });
+  }
+};
 
