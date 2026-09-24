@@ -71,7 +71,13 @@ app.use(cors(corsOptions));
 app.use(helmet({
     crossOriginResourcePolicy: false,
 }));
-app.use(express.json());
+app.use(express.json({
+    verify: (req, _res, buf) => {
+        if (req.originalUrl && req.originalUrl.includes('/webhook')) {
+            req.rawBody = buf;
+        }
+    }
+}));
 app.use(cookieParser());
 // Protect KYC uploads from unauthenticated direct public access
 app.use('/uploads/kyc', (req, res) => {
@@ -222,55 +228,7 @@ db.sequelize.sync() // creates missing tables but avoids complex alterations to 
     .then(async () => {
         console.log("✅ Database synchronized successfully (Tables created/updated)");
 
-        // Safely add missing column to user table without alter: true which breaks on unique constraints
-        try {
-            await db.sequelize.query("ALTER TABLE `user` ADD COLUMN `accountStatus` ENUM('active', 'suspended', 'banned') DEFAULT 'active';");
-            console.log("✅ accountStatus column added to user table");
-        } catch (err) {
-            if (err.original && err.original.errno !== 1060) {
-                console.error("Note: accountStatus column already exists or could not be added.");
-            }
-        }
-
-        // Safely patch notification enum and message length
-        try {
-            await db.sequelize.query("ALTER TABLE `notifications` MODIFY COLUMN `receiverType` ENUM('mentor', 'mentee', 'admin') NOT NULL;");
-            await db.sequelize.query("ALTER TABLE `notifications` MODIFY COLUMN `message` TEXT NOT NULL;");
-            console.log("✅ notifications table patched (enum & message text)");
-        } catch (err) {
-            console.error("Note: could not patch notifications table.");
-        }
-
-        // Safely add duration column to appointment table
-        try {
-            await db.sequelize.query("ALTER TABLE `appointment` ADD COLUMN `duration` INT DEFAULT 0;");
-            console.log("✅ duration column added to appointment table");
-        } catch (err) {
-            if (err.original && err.original.errno !== 1060) {
-                console.error("Note: duration column already exists or could not be added.");
-            }
-        }
-
-        // Safely add isFlagged and isHidden to review and mentor_commendation tables
-        try {
-            await db.sequelize.query("ALTER TABLE `review` ADD COLUMN `isFlagged` TINYINT(1) DEFAULT 0;");
-            await db.sequelize.query("ALTER TABLE `review` ADD COLUMN `isHidden` TINYINT(1) DEFAULT 0;");
-            console.log("✅ review table patched (isFlagged & isHidden)");
-        } catch (err) {
-            if (err.original && err.original.errno !== 1060) {
-                console.error("Note: could not patch review table:", err.message);
-            }
-        }
-
-        try {
-            await db.sequelize.query("ALTER TABLE `mentor_commendation` ADD COLUMN `isFlagged` TINYINT(1) DEFAULT 0;");
-            await db.sequelize.query("ALTER TABLE `mentor_commendation` ADD COLUMN `isHidden` TINYINT(1) DEFAULT 0;");
-            console.log("✅ mentor_commendation table patched (isFlagged & isHidden)");
-        } catch (err) {
-            if (err.original && err.original.errno !== 1060) {
-                console.error("Note: could not patch mentor_commendation table:", err.message);
-            }
-        }
+        // Note: Schema updates and column alterations are handled via Sequelize migrations (run `npm run migrate`)
 
         server.listen(PORT, () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);

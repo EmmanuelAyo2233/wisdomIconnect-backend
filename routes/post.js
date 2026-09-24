@@ -1,5 +1,6 @@
 const { express } = require("../config/reuseablePackages");
 const { authentication } = require("../controllers/authcontrollers");
+const { sanitizeMiddleware } = require("../middlewares/sanitize");
 const {
     createPost,
     deletePost,
@@ -16,11 +17,19 @@ router.route("/").get(getAllPost);
 // Get post details by Id
 router.route("/:id").get(getFullPost);
 
-// Create Post
-router.route("/add").post(authentication, createPost);
+// Create Post (Sanitized)
+router.route("/add").post(
+    authentication,
+    sanitizeMiddleware(["title", "content", "category", "tags"]),
+    createPost
+);
 
-// Update Post
-router.route("/update/:id").patch(authentication, updatePost);
+// Update Post (Sanitized)
+router.route("/update/:id").patch(
+    authentication,
+    sanitizeMiddleware(["title", "content", "category", "tags"]),
+    updatePost
+);
 
 // Delete Post
 router.route("/delete/:id").delete(authentication, deletePost);

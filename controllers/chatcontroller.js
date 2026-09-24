@@ -3,6 +3,8 @@ const { SECRET_KEY } = require("../config/reuseablePackages");
 const { Connection, ChatMessage, Mentor, Mentee, User } = require("../models");
 const { Op } = require("sequelize"); 
 const socketIo = require("socket.io");
+const { cloudinary } = require("../utils/cloudinary");
+const streamifier = require("streamifier");
 
 // ===============================
 // 🔌 SOCKET.IO CHAT SETUP
@@ -207,17 +209,11 @@ const uploadChatFile = async (req, res) => {
     const { connectionId } = req.params;
     const userId = req.user.id;
 
-    if (!req.file) {
+    if (!req.file || !req.file.buffer) {
       return res.status(400).json({ status: "fail", message: "No file uploaded ❌" });
     }
 
-    const { filename, mimetype } = req.file;
-    // ✅ FIXED: Use BACKEND_URL env variable or construct from request
-    const backendUrl = process.env.BACKEND_URL || 
-                      (req.get('origin')?.replace(/https?:\/\/[^:]+/, `${req.protocol}://${req.get('host')}`) || 
-                      `${req.protocol}://${req.get('host')}`) ||
-                      "http://localhost:5000";
-    const fileUrl = `${backendUrl}/uploads/${filename}`;
+    const { mimetype, originalname } = req.file;
 
     const connection = await Connection.findOne({
       where: { id: connectionId, status: "accepted" }
@@ -227,13 +223,25 @@ const uploadChatFile = async (req, res) => {
       return res.status(403).json({ status: "fail", message: "Connection not accepted ❌" });
     }
 
+    // Stream upload directly to Cloudinary
+    const fileUrl = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: "chat_attachments", resource_type: "auto" },
+        (err, result) => {
+          if (err) return reject(err);
+          resolve(result.secure_url);
+        }
+      );
+      streamifier.createReadStream(req.file.buffer).pipe(stream);
+    });
+
     const newMessage = await ChatMessage.create({
       chatAccessId: connection.id,
       senderId: userId,
       message: req.body.message || null,
       fileUrl,
       fileType: mimetype,
-      fileName: filename,
+      fileName: originalname || "attachment",
     });
 
     res.status(201).json({ status: "success", data: newMessage });

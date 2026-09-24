@@ -102,10 +102,11 @@ exports.bookAppointment = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Bookings cannot be in the past ❌" });
     }
 
-    // ⛔ Enforce Pricing Validation at Booking
+    // ⛔ Enforce Pricing from Availability Slot (Never trust client-supplied price)
     const mentorUser = await User.findByPk(mentorUserId);
     const mentorLevel = mentorUser ? mentorUser.mentorLevel : "starter";
-    const sessionAmount = req.body.amount !== undefined ? Number(req.body.amount) : Number(availabilitySlot.price) || 0;
+    const slotPrice = Number(availabilitySlot.price) || 0;
+    const sessionAmount = slotPrice;
 
     if (mentorLevel === "starter" && sessionAmount > 0) {
       return res.status(400).json({ status: "fail", message: "Starter mentors can only offer free sessions. ❌" });
@@ -115,6 +116,40 @@ exports.bookAppointment = async (req, res) => {
     }
     if (mentorLevel === "gold" && sessionAmount > 50000) {
       return res.status(400).json({ status: "fail", message: "Gold mentors can charge up to 50,000 max. ❌" });
+    }
+
+    // ✅ Payment Logic & Replay Check for paid sessions
+    if (sessionAmount > 0) {
+      const paymentRef = req.body.reference?.trim();
+      if (!paymentRef) {
+         return res.status(400).json({ status: "fail", message: "Payment reference is required for paid sessions ❌" });
+      }
+
+      // 🛡️ Replay Protection: Check if reference was already processed in DB
+      const PaymentModel = require("../models/payment");
+      const existingPayment = await PaymentModel.findOne({ where: { reference: paymentRef } });
+      if (existingPayment) {
+         return res.status(400).json({ status: "fail", message: "This transaction reference has already been used ❌" });
+      }
+
+      const axios = require("axios");
+      try {
+         const paystackSecret = process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197';
+         const paystackRes = await axios.get(`https://api.paystack.co/transaction/verify/${paymentRef}`, {
+            headers: { Authorization: `Bearer ${paystackSecret}` }
+         });
+         const txData = paystackRes.data.data;
+         const paidAmountNaira = (txData.amount || 0) / 100;
+
+         if (txData.status !== "success" || paidAmountNaira < sessionAmount) {
+             return res.status(400).json({ 
+                 status: "fail", 
+                 message: `Payment verification failed. Expected ₦${sessionAmount.toLocaleString()}, received ₦${paidAmountNaira.toLocaleString()} ❌` 
+             });
+         }
+      } catch (error) {
+         return res.status(500).json({ status: "error", message: "Failed to verify payment with Paystack ❌" });
+      }
     }
 
     // ✅ Create appointment
@@ -139,32 +174,9 @@ exports.bookAppointment = async (req, res) => {
       appointment.update({ slotId: availabilitySlot.id }),
     ]);
 
-    // ✅ Payment Logic
+    // ✅ Record Payment and escrow if paid session
     if (sessionAmount > 0) {
-      if (!req.body.reference) {
-         await appointment.destroy();
-         await availabilitySlot.update({ status: "available" });
-         return res.status(400).json({ status: "fail", message: "Payment reference is required for paid sessions ❌" });
-      }
-
-      const axios = require("axios");
-      try {
-         const paystackRes = await axios.get(`https://api.paystack.co/transaction/verify/${req.body.reference}`, {
-            headers: { Authorization: `Bearer ${process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197'}` }
-         });
-         const txData = paystackRes.data.data;
-         if (txData.status !== "success" || txData.amount / 100 < sessionAmount) {
-             await appointment.destroy();
-             await availabilitySlot.update({ status: "available" });
-             return res.status(400).json({ status: "fail", message: "Payment verification failed or amount mismatch ❌" });
-         }
-      } catch (error) {
-         await appointment.destroy();
-         await availabilitySlot.update({ status: "available" });
-         return res.status(500).json({ status: "error", message: "Failed to verify payment with Paystack" });
-      }
-
-      // Fetch platform commission rate dynamically (default to 10% if not set)
+      const paymentRef = req.body.reference.trim();
       const commissionSetting = await PlatformSetting.findByPk('platform_commission_rate');
       const platformCommissionPercent = commissionSetting ? parseFloat(commissionSetting.value) : 10.0;
       const platformShareRate = platformCommissionPercent / 100.0;
@@ -180,7 +192,7 @@ exports.bookAppointment = async (req, res) => {
         amount: sessionAmount,
         mentorShare,
         platformShare,
-        reference: req.body.reference,
+        reference: paymentRef,
         status: paymentStatus
       });
 

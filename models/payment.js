@@ -14,6 +14,7 @@ const Payment = sequelize.define(
         reference: {
             type: DataTypes.STRING,
             allowNull: true,
+            unique: true,
         },
         amount: {
             type: DataTypes.FLOAT,

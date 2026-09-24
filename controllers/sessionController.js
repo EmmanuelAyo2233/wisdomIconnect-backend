@@ -386,13 +386,17 @@ exports.endSession = async (req, res) => {
             });
         }
 
-        // Validate 70% threshold for paid sessions
-        const threshold = 0.70 * scheduledMinutes;
-        if (actualMinutes < threshold) {
-            // Under threshold -> Dispute
+        // Paid sessions: Verify both participants joined or call lasted at least 2 minutes
+        // Replaces the rigid 70% threshold so satisfied sessions that finish early complete smoothly,
+        // while preventing zero-second or single-party accidental disconnects from auto-releasing escrow.
+        const bothJoined = Boolean(appointment.mentorJoinTime && appointment.menteeJoinTime);
+        const hasMinimumCallDuration = actualMinutes >= 2;
+
+        if (!hasMinimumCallDuration && !bothJoined) {
+            // Less than 2 minutes and both parties haven't joined -> Don't auto-release escrow
             appointment.status = "under_review";
             appointment.disputedBy = "system";
-            appointment.disputeReason = `Session ended early. Scheduled: ${scheduledMinutes}m, Actual: ${actualMinutes}m. Under 70% threshold (${Math.round(threshold)}m).`;
+            appointment.disputeReason = `Call ended after only ${actualMinutes}m before both participants actively connected. Escrow held for safety.`;
             await appointment.save();
 
             const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
@@ -403,7 +407,7 @@ exports.endSession = async (req, res) => {
 
             logActivity({
                 type: "SESSION",
-                message: `Session early end dispute triggered for Appointment ID ${appointment.id} (Under 70% threshold)`,
+                message: `Session early end under review for Appointment ID ${appointment.id} (call duration < 2m without dual join)`,
                 userId,
                 targetId: appointment.id,
                 status: "failed",
@@ -411,18 +415,18 @@ exports.endSession = async (req, res) => {
                     appointmentId,
                     scheduledMinutes,
                     actualMinutes,
-                    threshold
+                    bothJoined
                 }
             });
 
             return res.status(200).json({
                 status: "success",
-                message: "Session ended early and marked under review. Escrow locked 🔒",
+                message: "Call ended early (under 2 minutes). Escrow remains held safely under review 🔒",
                 data: appointment,
                 underReview: true
             });
         } else {
-            // Threshold met -> Auto-Complete and release escrow immediately!
+            // Both joined and had a genuine session -> Auto-Complete and release escrow immediately!
             await performSessionCompletion(appointment, "automatic");
             logActivity({
                 type: "SESSION",

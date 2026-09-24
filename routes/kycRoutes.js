@@ -2,7 +2,6 @@ const express = require("express");
 const router = express.Router();
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
 const { authentication, restrictTo } = require("../controllers/authcontrollers");
 const {
   submitKyc,
@@ -11,19 +10,12 @@ const {
   reviewKyc,
 } = require("../controllers/kycController");
 
-// ─── Multer Storage Config ──────────────────────────────────────────────────
-const kycUploadDir = path.join(__dirname, "../uploads/kyc");
-if (!fs.existsSync(kycUploadDir)) {
-  fs.mkdirSync(kycUploadDir, { recursive: true });
-}
+// ✅ Rate limiter for KYC submission
+const { kycLimiter } = require("../config/rateLimiter");
 
-const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, kycUploadDir),
-  filename: (_req, file, cb) => {
-    const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${unique}${path.extname(file.originalname)}`);
-  },
-});
+// ─── Multer Config (Memory Storage → Cloudinary) ─────────────────────────────
+// Files are kept in memory (Buffer) and streamed to Cloudinary in the controller.
+// No local filesystem writes — safe for Railway/Render deployments.
 
 const fileFilter = (_req, file, cb) => {
   const allowed = /jpeg|jpg|png|pdf/;
@@ -34,7 +26,7 @@ const fileFilter = (_req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
 });
@@ -44,24 +36,15 @@ const kycUpload = upload.fields([
   { name: "selfie", maxCount: 1 },
 ]);
 
-// ─── Apply Auth to All Routes ────────────────────────────────────────────────
+// ─── Apply Auth to All Routes ─────────────────────────────────────────────────
 router.use(authentication);
 
-// ─── Mentor Routes ───────────────────────────────────────────────────────────
-router.post("/submit", restrictTo("mentor"), kycUpload, submitKyc);
+// ─── Mentor Routes ─────────────────────────────────────────────────────────────
+router.post("/submit", restrictTo("mentor"), kycLimiter, kycUpload, submitKyc);
 router.get("/status", restrictTo("mentor"), getMyKycStatus);
 
-// ─── Admin Routes ────────────────────────────────────────────────────────────
+// ─── Admin Routes ──────────────────────────────────────────────────────────────
 router.get("/admin/all", restrictTo("admin"), getAllKycSubmissions);
 router.patch("/admin/:id/review", restrictTo("admin"), reviewKyc);
-
-// ─── Secure KYC Document Serving ─────────────────────────────────────────────
-router.get("/document/:filename", (req, res) => {
-  const filePath = path.join(kycUploadDir, path.basename(req.params.filename));
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ status: "fail", message: "Document not found" });
-  }
-  res.sendFile(filePath);
-});
 
 module.exports = router;

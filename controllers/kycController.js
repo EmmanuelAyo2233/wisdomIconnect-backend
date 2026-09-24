@@ -4,7 +4,21 @@ const User = require("../models/user");
 const { logActivity } = require("../services/activityLogger");
 const notificationService = require("../services/notificationService");
 const path = require("path");
-const fs = require("fs");
+const { cloudinary } = require("../utils/cloudinary");
+const streamifier = require("streamifier");
+
+const uploadBufferToCloudinary = (fileBuffer, folder = "kyc_documents") => {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder, resource_type: "auto" },
+      (err, result) => {
+        if (err) return reject(err);
+        resolve(result.secure_url);
+      }
+    );
+    streamifier.createReadStream(fileBuffer).pipe(stream);
+  });
+};
 
 // =========================================================
 // 🧑‍💼 MENTOR: Submit KYC Documents
@@ -42,8 +56,11 @@ exports.submitKyc = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Both ID document and selfie photo are required ❌" });
     }
 
-    const idDocumentUrl = `/uploads/kyc/${files.id_document[0].filename}`;
-    const selfieUrl = `/uploads/kyc/${files.selfie[0].filename}`;
+    // Stream upload directly to Cloudinary from memory buffer
+    const [idDocumentUrl, selfieUrl] = await Promise.all([
+      uploadBufferToCloudinary(files.id_document[0].buffer, "kyc_documents/id_documents"),
+      uploadBufferToCloudinary(files.selfie[0].buffer, "kyc_documents/selfies"),
+    ]);
 
     // Remove old pending KYC if rejected and re-submitting
     await MentorKyc.destroy({ where: { mentorId: mentor.id } });

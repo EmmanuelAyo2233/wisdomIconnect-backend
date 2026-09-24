@@ -802,6 +802,28 @@ exports.resolveDispute = async (req, res) => {
                       await adminWallet.save();
                  }
             }
+
+            // Automated Paystack Refund Call
+            if (payment.reference) {
+                try {
+                    const axios = require("axios");
+                    const paystackSecret = process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197';
+                    const refundRes = await axios.post(
+                        'https://api.paystack.co/refund',
+                        { transaction: payment.reference, amount: Math.round(payment.amount * 100) },
+                        { headers: { Authorization: `Bearer ${paystackSecret}` } }
+                    );
+                    if (refundRes.data?.data?.reference) {
+                        payment.refund_reference = refundRes.data.data.reference;
+                        payment.refundedAt = new Date();
+                        await payment.save();
+                    }
+                } catch (pRefErr) {
+                    console.warn("⚠️ Dispute Paystack refund note:", pRefErr.response?.data?.message || pRefErr.message);
+                    payment.refundReason = pRefErr.response?.data?.message || "Manual refund required via Paystack dashboard";
+                    await payment.save();
+                }
+            }
         }
 
         await AdminLog.create({

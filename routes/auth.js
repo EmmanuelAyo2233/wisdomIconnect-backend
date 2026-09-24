@@ -14,35 +14,32 @@ const {
 } = require("../controllers/authcontrollers");
 const { upload } = require("../utils/cloudinary");
 
-const rateLimiter = require("../config/rateLimiter");
-const authLimiter = rateLimiter({ windowMs: 15 * 60 * 1000, max: 5, message: "Too many login/auth requests from this IP. Please try again after 15 minutes." });
+// ✅ Production-safe rate limiter (express-rate-limit)
+const { authLimiter } = require("../config/rateLimiter");
+
+// ✅ Input sanitization middleware
+const { sanitizeMiddleware } = require("../middlewares/sanitize");
 
 const router = express.Router();
 
-router.post("/register", upload.single("certificate"), signup);
-router.route("/login").post(authLimiter, login);
+router.post(
+    "/register",
+    upload.single("certificate"),
+    sanitizeMiddleware(["name", "email", "bio", "role", "expertise"]),
+    signup
+);
+router.route("/login").post(
+    authLimiter,
+    sanitizeMiddleware(["email"]),
+    login
+);
 
-const { db, User, Mentor } = require("../models");
-router.get("/fix-db", async (req, res) => {
-    try {
-        const admin = await User.findOne({ where: { email: "admin@wisdomconnect.com" } });
-        const [tables] = await db.sequelize.query("SHOW TABLES;");
-        res.json({ 
-            adminExists: !!admin, 
-            userTable: User.tableName,
-            mentorTable: Mentor.tableName,
-            tables
-        });
-    } catch(e) {
-        res.send("Sync Error: " + e.message);
-    }
-});
 
-router.post("/forgot-password", authLimiter, forgotPassword);
+router.post("/forgot-password", authLimiter, sanitizeMiddleware(["email"]), forgotPassword);
 router.post("/reset-password", authLimiter, resetPassword);
 router.post("/logout",  authentication, logout);
 router.post("/verify-email", verifyEmail);
-router.post("/resend-verification", authLimiter, resendVerification);
+router.post("/resend-verification", authLimiter, sanitizeMiddleware(["email"]), resendVerification);
 
 // Admin-only routes for mentor approval/rejection
 router.patch(

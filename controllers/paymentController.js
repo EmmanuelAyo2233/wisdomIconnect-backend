@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { Wallet, Payment, Appointment, Mentor, Mentee, User, Withdrawal, PlatformSetting } = require('../models');
 const { Op } = require('sequelize');
 const notificationService = require("../services/notificationService");
@@ -40,7 +41,25 @@ exports.verifyPayment = async (req, res) => {
         });
         if (!appointment) return res.status(404).json({ success: false, message: "Appointment not found" });
 
+        // 🛡️ Authorization Check: Only mentee who booked or admin can verify payment
+        if (req.user.userType !== 'admin' && appointment.mentee?.user_id !== req.user.id) {
+            return res.status(403).json({ success: false, message: "Unauthorized: You did not book this appointment" });
+        }
+
         const amountNaira = data.amount / 100;
+
+        // 🛡️ Amount Validation: Ensure amount paid matches slot price if available
+        if (appointment.slotId) {
+            const Availability = require("../models/availability");
+            const slot = await Availability.findByPk(appointment.slotId);
+            const slotPrice = slot ? Number(slot.price) : 0;
+            if (slotPrice > 0 && amountNaira < slotPrice) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: `Payment amount (₦${amountNaira}) is less than required session price (₦${slotPrice})` 
+                });
+            }
+        }
         
         // Fetch platform commission rate dynamically (default to 10% if not set)
         const commissionSetting = await PlatformSetting.findByPk('platform_commission_rate');
@@ -225,7 +244,23 @@ exports.requestRefund = async (req, res) => {
             if (adminWallet.pendingBalance < 0) adminWallet.pendingBalance = 0;
             await adminWallet.save();
             
-            // Initiating Paystack Refund ...
+            // Automated Paystack Refund Call
+            try {
+                const refundRes = await axios.post(
+                    'https://api.paystack.co/refund',
+                    { transaction: payment.reference, amount: Math.round(payment.amount * 100) },
+                    { headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` } }
+                );
+                if (refundRes.data?.data?.reference) {
+                    payment.refund_reference = refundRes.data.data.reference;
+                    payment.refundedAt = new Date();
+                    await payment.save();
+                }
+            } catch (pRefErr) {
+                console.warn("⚠️ Automated Paystack refund note:", pRefErr.response?.data?.message || pRefErr.message);
+                payment.refundReason = pRefErr.response?.data?.message || "Manual processing required via Paystack dashboard";
+                await payment.save();
+            }
             
             if (appointment.mentee && appointment.mentee.user) {
                 notificationService.sendNotification({
@@ -266,7 +301,8 @@ exports.withdrawFunds = async (req, res) => {
         const { amount, bankName, accountNumber, accountName } = req.body;
         const userId = req.user.id; 
 
-        if (!amount || amount < 5000) return res.status(400).json({ success: false, message: "Minimum withdrawal amount is ₦5,000" });
+        const withdrawAmount = Number(amount);
+        if (!withdrawAmount || withdrawAmount < 5000) return res.status(400).json({ success: false, message: "Minimum withdrawal amount is ₦5,000" });
         if (!bankName || !accountNumber || !accountName) {
             return res.status(400).json({ success: false, message: "Bank name, account number, and account name are required." });
         }
@@ -274,19 +310,27 @@ exports.withdrawFunds = async (req, res) => {
             return res.status(400).json({ success: false, message: "Please enter a valid 10-digit NUBAN account number." });
         }
 
-        const wallet = await Wallet.findOne({ where: { userId } });
         const mentor = await Mentor.findOne({ where: { user_id: userId } });
-        
         if (!mentor) {
             return res.status(404).json({ success: false, message: "Mentor profile not found" });
         }
-        if (!wallet || wallet.availableBalance < amount) {
+
+        // 🛡️ Atomic Deduction with Condition [Op.gte] to eliminate race conditions (double-spend)
+        const [affectedCount] = await Wallet.update(
+            { availableBalance: require("sequelize").literal(`available_balance - ${withdrawAmount}`) },
+            { 
+                where: { 
+                    userId, 
+                    availableBalance: { [Op.gte]: withdrawAmount } 
+                } 
+            }
+        );
+
+        if (affectedCount === 0) {
             return res.status(400).json({ success: false, message: "Insufficient available balance for this withdrawal" });
         }
 
-        // Lock & Deduct available balance
-        wallet.availableBalance -= amount;
-        await wallet.save();
+        const wallet = await Wallet.findOne({ where: { userId } });
 
         const reference = `WD-${Date.now()}-${Math.floor(1000 + Math.random() * 9000)}`;
 
@@ -515,5 +559,132 @@ exports.getTransactions = async (req, res) => {
         res.status(200).json({ success: true, transactions });
     } catch (err) {
         res.status(500).json({ success: false, message: "Server error" });
+    }
+};
+
+/**
+ * Paystack Webhook Handler
+ * Verifies Paystack HMAC SHA512 signature before processing payment events.
+ */
+exports.paystackWebhook = async (req, res) => {
+    try {
+        const signature = req.headers['x-paystack-signature'];
+        if (!signature) {
+            console.warn("⚠️ Paystack webhook: missing x-paystack-signature header");
+            return res.status(400).send("No signature provided");
+        }
+
+        const rawBody = req.rawBody || (Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body)));
+        const hash = crypto.createHmac('sha512', PAYSTACK_SECRET_KEY).update(rawBody).digest('hex');
+
+        if (hash !== signature) {
+            console.warn("⚠️ Invalid Paystack webhook signature rejected");
+            return res.status(401).send("Invalid signature");
+        }
+
+        // Parse payload
+        let event = req.body;
+        if (Buffer.isBuffer(req.body)) {
+            try {
+                event = JSON.parse(req.body.toString('utf8'));
+            } catch (pErr) {
+                console.error("Paystack webhook JSON parse error:", pErr);
+                return res.status(400).send("Invalid JSON payload");
+            }
+        }
+
+        // Acknowledge immediately to Paystack (200 OK)
+        res.sendStatus(200);
+
+        if (event && event.event === 'charge.success') {
+            const data = event.data || {};
+            const reference = data.reference;
+            const appointmentId = data.metadata?.appointmentId;
+
+            if (!reference) return;
+
+            const existingPayment = await Payment.findOne({ where: { reference } });
+            if (existingPayment) {
+                console.log(`ℹ️ Paystack webhook: Transaction ${reference} already processed`);
+                return;
+            }
+
+            if (!appointmentId) {
+                console.warn(`⚠️ Paystack webhook: charge.success for ref ${reference} has no appointmentId in metadata`);
+                return;
+            }
+
+            const appointment = await Appointment.findByPk(appointmentId, {
+                include: [
+                    { model: Mentor, as: 'mentor', include: [{ model: User, as: 'user' }] },
+                    { model: Mentee, as: 'mentee', include: [{ model: User, as: 'user' }] }
+                ]
+            });
+
+            if (!appointment) {
+                console.error(`❌ Paystack webhook: Appointment ${appointmentId} not found`);
+                return;
+            }
+
+            const amountNaira = data.amount / 100;
+            const commissionSetting = await PlatformSetting.findByPk('platform_commission_rate');
+            const platformCommissionPercent = commissionSetting ? parseFloat(commissionSetting.value) : 10.0;
+            const platformShareRate = platformCommissionPercent / 100.0;
+            const mentorShareRate = 1.0 - platformShareRate;
+
+            const mentorShare = amountNaira * mentorShareRate;
+            const platformShare = amountNaira * platformShareRate;
+
+            const payment = await Payment.create({
+                reference,
+                amount: amountNaira,
+                mentorShare,
+                platformShare,
+                appointmentId: appointment.id,
+                status: "pending" // ESCROW
+            });
+
+            // Escrow Mentor
+            const mentorUserId = appointment.mentor?.user_id;
+            if (mentorUserId) {
+                let mentorWallet = await Wallet.findOne({ where: { userId: mentorUserId } });
+                if (!mentorWallet) mentorWallet = await Wallet.create({ userId: mentorUserId });
+                mentorWallet.pendingBalance = Number(mentorWallet.pendingBalance || 0) + mentorShare;
+                await mentorWallet.save();
+            }
+
+            // Escrow Platform
+            const adminWallet = await getPlatformAdminWallet();
+            adminWallet.pendingBalance = Number(adminWallet.pendingBalance || 0) + platformShare;
+            await adminWallet.save();
+
+            // Send notification to mentee
+            if (appointment.mentee && appointment.mentee.user) {
+                notificationService.sendPaymentSuccess(
+                    appointment.mentee.user,
+                    "mentee",
+                    `₦${amountNaira.toLocaleString()}`,
+                    `Session with ${appointment.mentor?.user?.name || 'Mentor'}`
+                ).catch(console.error);
+            }
+
+            logActivity({
+                type: "PAYMENT",
+                message: `Paystack Webhook: Payment of ₦${amountNaira.toLocaleString()} verified for Session (Appointment ID: ${appointment.id})`,
+                userId: appointment.mentee?.user_id,
+                targetId: payment.id,
+                status: "success",
+                metadata: {
+                    reference,
+                    amount: amountNaira,
+                    mentorShare,
+                    platformShare,
+                    appointmentId: appointment.id,
+                    source: "paystack_webhook"
+                }
+            });
+        }
+    } catch (err) {
+        console.error("Paystack webhook error:", err);
     }
 };
