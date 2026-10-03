@@ -15,7 +15,7 @@ exports.getSettings = async (req, res) => {
     }
     res.json({ data: settings });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -24,6 +24,8 @@ exports.updateSetting = async (req, res) => {
     const adminId = req.user.id;
     const { key } = req.params;
     const { value, description } = req.body;
+    if(req.user.userType!=='admin') return res.status(403).json({message:'Admin required'});
+    if(!['platform_commission_rate','min_session_price'].includes(key) || !Number.isFinite(Number(value)) || Number(value)<0 || Number(value)>(key==='platform_commission_rate'?100:50000)) return res.status(400).json({message:'Invalid setting or value'});
 
     let setting = await PlatformSetting.findByPk(key);
     if (setting) {
@@ -43,6 +45,6 @@ exports.updateSetting = async (req, res) => {
 
     res.json({ message: "Setting updated successfully", data: setting });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error",});
   }
 };

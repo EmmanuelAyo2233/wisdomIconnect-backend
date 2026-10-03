@@ -45,7 +45,7 @@ const getAllMentors = async (req, res) => {
       data: formatted,
     });
   } catch (err) {
-    console.error("❌ Error fetching mentors:", err);
+    require('../utils/logger').error("❌ Error fetching mentors:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
@@ -170,7 +170,7 @@ const getMentorsDetails = async (req, res) => {
 
     res.status(200).json({ status: "success", data: profile });
   } catch (err) {
-    console.error("❌ Error fetching mentor profile:", err);
+    require('../utils/logger').error("❌ Error fetching mentor profile:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
@@ -286,7 +286,7 @@ const getMenteeProfileById = async (req, res) => {
 
     res.status(200).json({ status: "success", data: profileData });
   } catch (err) {
-    console.error("error fetching mentee", err);
+    require('../utils/logger').error("error fetching mentee", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
@@ -341,7 +341,6 @@ const bookApppointment = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to book appointment",
-            error: error.message,
         });
     }
 };
@@ -369,7 +368,6 @@ const apppointmentLists = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to lisr all appointments",
-            error: error.message,
         });
     }
 };
@@ -406,7 +404,6 @@ const resceduleAppointment = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to reschedule appointment",
-            error: error.message,
         });
     }
 };
@@ -441,7 +438,6 @@ const cancelAppointment = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to cancel appointment",
-            error: error.message,
         });
     }
 };
@@ -474,7 +470,6 @@ const deleteAppointment = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to delete appointment",
-            error: error.message,
         });
     }
 };

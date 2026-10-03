@@ -28,7 +28,7 @@ exports.submitReport = async (req, res) => {
 
     return res.status(201).json({ status: 'success', message: 'Report submitted. Our team will review it shortly.', data: report });
   } catch (error) {
-    console.error('Report error:', error);
+    require('../utils/logger').error('Report error:', error);
     return res.status(500).json({ status: 'fail', message: 'Failed to submit report.' });
   }
 };
@@ -45,7 +45,7 @@ exports.getAllReports = async (req, res) => {
     });
     return res.status(200).json({ status: 'success', data: reports });
   } catch (error) {
-    console.error('Get reports error:', error);
+    require('../utils/logger').error('Get reports error:', error);
     return res.status(500).json({ status: 'fail', message: 'Failed to fetch reports.' });
   }
 };
@@ -96,7 +96,7 @@ exports.updateReportStatus = async (req, res) => {
     await report.save();
     return res.status(200).json({ status: 'success', message });
   } catch (error) {
-    console.error('Update report error:', error);
+    require('../utils/logger').error('Update report error:', error);
     return res.status(500).json({ status: 'fail', message: 'Failed to update report.' });
   }
 };

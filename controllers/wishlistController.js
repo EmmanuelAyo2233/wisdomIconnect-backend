@@ -18,7 +18,7 @@ const toggleWishlist = async (req, res) => {
     await Wishlist.create({ menteeId, mentorId });
     return res.status(201).json({ status: 'success', saved: true, message: 'Mentor saved to wishlist!' });
   } catch (error) {
-    console.error('Wishlist toggle error:', error);
+    require('../utils/logger').error('Wishlist toggle error:', error);
     return res.status(500).json({ status: 'fail', message: 'Failed to update wishlist.' });
   }
 };
@@ -48,7 +48,7 @@ const getWishlist = async (req, res) => {
 
     return res.status(200).json({ status: 'success', data });
   } catch (error) {
-    console.error('Get wishlist error:', error);
+    require('../utils/logger').error('Get wishlist error:', error);
     return res.status(500).json({ status: 'fail', message: 'Failed to get wishlist.' });
   }
 };

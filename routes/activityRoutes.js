@@ -6,7 +6,8 @@ const Activity = require("../models/activity");
 // POST /activity/log - Exposes HTTP endpoint for internal/system logging
 router.post("/log", authentication, async (req, res) => {
   try {
-    const { type, message, targetId, status = "success", metadata = null } = req.body;
+    const message = typeof req.body.message === "string" ? req.body.message.slice(0,500) : "Client activity";
+    const type = "USER", targetId = null, status = "success", metadata = {source:"client_telemetry"};
     
     // Validate activity type
     const validTypes = ["BOOKING", "PAYMENT", "SESSION", "USER", "SYSTEM"];
@@ -27,7 +28,7 @@ router.post("/log", authentication, async (req, res) => {
 
     return res.status(201).json({ success: true, activity });
   } catch (error) {
-    console.error("Error in activity log HTTP endpoint:", error);
+    require('../utils/logger').error("Error in activity log HTTP endpoint:", error);
     res.status(500).json({ success: false, message: "Server error logging activity", error: error.message });
   }
 });

@@ -56,11 +56,11 @@ exports.getNotifications = async (req, res) => {
       data: notifications,
     });
   } catch (err) {
-    console.error("❌ getNotifications error:", err);
+    require('../utils/logger').error("❌ getNotifications error:", err);
 
     res.status(500).json({
       status: "error",
-      message: err.message,
+      message: "Unable to complete this request",
     });
   }
 };
@@ -107,7 +107,7 @@ exports.markAllAsRead = async (req, res) => {
       message: "All notifications marked as read ✅",
     });
   } catch (err) {
-    console.error("❌ markAllAsRead error:", err);
+    require('../utils/logger').error("❌ markAllAsRead error:", err);
     res.status(500).json({
       status: "error",
       message: "Failed to mark all as read ❌",

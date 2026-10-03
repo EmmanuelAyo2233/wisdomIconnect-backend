@@ -1,3 +1,5 @@
+const {respondError,text} = require('../utils/security');
+const kycService = require('../services/kycService');
 const Mentor = require("../models/mentor");
 const MentorKyc = require("../models/mentorKyc");
 const User = require("../models/user");
@@ -10,10 +12,10 @@ const streamifier = require("streamifier");
 const uploadBufferToCloudinary = (fileBuffer, folder = "kyc_documents") => {
   return new Promise((resolve, reject) => {
     const stream = cloudinary.uploader.upload_stream(
-      { folder, resource_type: "auto" },
+      { folder, resource_type: "auto", type: "authenticated" },
       (err, result) => {
         if (err) return reject(err);
-        resolve(result.secure_url);
+        resolve(JSON.stringify({publicId:result.public_id,resourceType:result.resource_type,format:result.format}));
       }
     );
     streamifier.createReadStream(fileBuffer).pipe(stream);
@@ -56,28 +58,15 @@ exports.submitKyc = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "Both ID document and selfie photo are required ❌" });
     }
 
+    require("../utils/uploadValidation").validateFile(files.id_document[0]);
+    require("../utils/uploadValidation").validateFile(files.selfie[0],true);
     // Stream upload directly to Cloudinary from memory buffer
     const [idDocumentUrl, selfieUrl] = await Promise.all([
       uploadBufferToCloudinary(files.id_document[0].buffer, "kyc_documents/id_documents"),
       uploadBufferToCloudinary(files.selfie[0].buffer, "kyc_documents/selfies"),
     ]);
 
-    // Remove old pending KYC if rejected and re-submitting
-    await MentorKyc.destroy({ where: { mentorId: mentor.id } });
-
-    // Create new KYC submission
-    await MentorKyc.create({
-      mentorId: mentor.id,
-      id_type,
-      id_document_url: idDocumentUrl,
-      selfie_url: selfieUrl,
-      phone_number: phone_number || null,
-      status: "pending",
-    });
-
-    // Update mentor kyc_status to pending
-    mentor.kyc_status = "pending";
-    await mentor.save();
+    await kycService.submit(req.user,{id_type,id_document_url:idDocumentUrl,selfie_url:selfieUrl,phone_number:phone_number ? text(phone_number,'Phone number',30):null});
 
     // Notify admin(s)
     const adminUser = await User.findOne({ where: { userType: "admin" } });
@@ -89,7 +78,7 @@ exports.submitKyc = async (req, res) => {
         title: "New KYC Submission",
         message: `Mentor ${req.user.name} has submitted their KYC documents for review.`,
         emailData: null,
-      }).catch(console.error);
+      }).catch(error=>require('../utils/logger').error('KYC notification failed',error));
     }
 
     logActivity({
@@ -105,8 +94,8 @@ exports.submitKyc = async (req, res) => {
       message: "KYC documents submitted successfully! We'll review them within 24–48 hours ✅",
     });
   } catch (error) {
-    console.error("❌ KYC submission error:", error);
-    return res.status(500).json({ status: "error", message: "Failed to submit KYC ❌", error: error.message });
+    require('../utils/logger').error("❌ KYC submission error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to submit KYC ❌",});
   }
 };
 
@@ -128,12 +117,12 @@ exports.getMyKycStatus = async (req, res) => {
       data: {
         kyc_status: mentor.kyc_status,
         kyc_rejection_reason: mentor.kyc_rejection_reason || null,
-        kyc: mentor.kyc || null,
+        kyc: mentor.kyc ? {status:mentor.kyc.status,id_type:mentor.kyc.id_type,createdAt:mentor.kyc.createdAt} : null,
       },
     });
   } catch (error) {
-    console.error("❌ Get KYC status error:", error);
-    return res.status(500).json({ status: "error", message: "Failed to get KYC status ❌", error: error.message });
+    require('../utils/logger').error("❌ Get KYC status error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to get KYC status ❌",});
   }
 };
 
@@ -171,129 +160,29 @@ exports.getAllKycSubmissions = async (req, res) => {
       data: submissions,
     });
   } catch (error) {
-    console.error("❌ Get all KYC submissions error:", error);
-    return res.status(500).json({ status: "error", message: "Failed to fetch KYC submissions ❌", error: error.message });
+    require('../utils/logger').error("❌ Get all KYC submissions error:", error);
+    return res.status(500).json({ status: "error", message: "Failed to fetch KYC submissions ❌",});
   }
 };
 
 // =========================================================
 // 🛡️ ADMIN: Review KYC (Approve / Reject)
 // =========================================================
-exports.reviewKyc = async (req, res) => {
+exports.reviewKyc = async (req,res) => {
   try {
-    const { id } = req.params; // KYC record ID
-    const { action, admin_note } = req.body; // action: 'approve' | 'reject'
+    const {kyc,mentor}=await kycService.review(req.user,req.params.id,req.body.action,req.body.admin_note);
+    notificationService.sendNotification({receiverId:mentor.id,receiverType:'mentor',type:'system',title:kyc.status==='verified'?'KYC verified':'KYC rejected',message:kyc.status==='verified'?'Your identity has been verified.':'Please review the KYC feedback and resubmit your documents.',link:'/mentor/kyc'}).catch(error=>require('../utils/logger').error('KYC notification failed',error));
+    res.json({status:'success',message:'KYC review recorded'});
+  } catch(error) {respondError(res,error);}
+};
 
-    if (!["approve", "reject"].includes(action)) {
-      return res.status(400).json({ status: "fail", message: "Action must be 'approve' or 'reject' ❌" });
-    }
-
-    const kyc = await MentorKyc.findByPk(id, {
-      include: [
-        {
-          model: Mentor,
-          as: "mentor",
-          include: [{ model: User, as: "user", attributes: ["id", "name", "email"] }],
-        },
-      ],
-    });
-
-    if (!kyc) return res.status(404).json({ status: "fail", message: "KYC submission not found ❌" });
-    if (kyc.status !== "pending") {
-      return res.status(400).json({ status: "fail", message: `This KYC has already been ${kyc.status} ❌` });
-    }
-
-    const mentor = kyc.mentor;
-    const mentorUser = mentor?.user;
-
-    if (action === "approve") {
-      kyc.status = "verified";
-      kyc.admin_note = admin_note || "Verified by admin";
-      kyc.reviewed_by = req.user.id;
-      kyc.reviewed_at = new Date();
-      await kyc.save();
-
-      mentor.kyc_status = "verified";
-      mentor.kyc_rejection_reason = null;
-      await mentor.save();
-
-      // Notify mentor
-      if (mentorUser) {
-        notificationService.sendNotification({
-          receiverId: mentor.id,
-          receiverType: "mentor",
-          type: "system",
-          title: "✅ KYC Verified!",
-          message: "Congratulations! Your identity has been verified. You can now create paid sessions and withdraw your earnings.",
-          emailData: {
-            to: mentorUser.email,
-            html: `<p>Hi ${mentorUser.name},</p>
-                   <p>Your KYC verification has been <strong>approved</strong>! 🎉</p>
-                   <p>You can now:</p>
-                   <ul>
-                     <li>Create paid mentorship sessions</li>
-                     <li>Withdraw your earnings</li>
-                   </ul>
-                   <p>Thank you for verifying your identity on Wisicom.</p>`
-          },
-        }).catch(console.error);
-      }
-
-      logActivity({
-        type: "USER",
-        message: `Admin approved KYC for Mentor ID ${mentor.id} (${mentorUser?.name})`,
-        userId: req.user.id,
-        status: "success",
-        metadata: { mentorId: mentor.id, kycId: kyc.id },
-      });
-
-      return res.status(200).json({ status: "success", message: `KYC for ${mentorUser?.name} approved ✅` });
-    } else {
-      // reject
-      if (!admin_note) {
-        return res.status(400).json({ status: "fail", message: "Please provide a rejection reason for the mentor ❌" });
-      }
-
-      kyc.status = "rejected";
-      kyc.admin_note = admin_note;
-      kyc.reviewed_by = req.user.id;
-      kyc.reviewed_at = new Date();
-      await kyc.save();
-
-      mentor.kyc_status = "rejected";
-      mentor.kyc_rejection_reason = admin_note;
-      await mentor.save();
-
-      // Notify mentor
-      if (mentorUser) {
-        notificationService.sendNotification({
-          receiverId: mentor.id,
-          receiverType: "mentor",
-          type: "system",
-          title: "❌ KYC Rejected",
-          message: `Your KYC submission was rejected. Reason: ${admin_note}. Please re-submit with the correct documents.`,
-          emailData: {
-            to: mentorUser.email,
-            html: `<p>Hi ${mentorUser.name},</p>
-                   <p>Unfortunately, your KYC submission was <strong>rejected</strong>.</p>
-                   <p><strong>Reason:</strong> ${admin_note}</p>
-                   <p>Please log in and re-submit your KYC with the correct documents.</p>`,
-          },
-        }).catch(console.error);
-      }
-
-      logActivity({
-        type: "USER",
-        message: `Admin rejected KYC for Mentor ID ${mentor.id} (${mentorUser?.name}). Reason: ${admin_note}`,
-        userId: req.user.id,
-        status: "failed",
-        metadata: { mentorId: mentor.id, kycId: kyc.id, reason: admin_note },
-      });
-
-      return res.status(200).json({ status: "success", message: `KYC for ${mentorUser?.name} rejected ❌` });
-    }
-  } catch (error) {
-    console.error("❌ Review KYC error:", error);
-    return res.status(500).json({ status: "error", message: "Failed to review KYC ❌", error: error.message });
-  }
+exports.getDocument = async (req,res) => {
+ try {
+  if(req.user.userType !== 'admin') return res.sendStatus(403);
+  const kyc = await MentorKyc.findByPk(req.params.id);
+  if(!kyc || !['id_document_url','selfie_url'].includes(req.params.field)) return res.sendStatus(404);
+  let asset; try {asset=JSON.parse(kyc[req.params.field]);} catch {return res.status(409).json({message:'Legacy document requires secure storage migration'});}
+  const url=cloudinary.utils.private_download_url(asset.publicId,asset.format,{resource_type:asset.resourceType,type:'authenticated',expires_at:Math.floor(Date.now()/1000)+300});
+  res.set('Cache-Control','no-store').json({url});
+ } catch {res.status(500).json({message:'Document retrieval failed'});}
 };

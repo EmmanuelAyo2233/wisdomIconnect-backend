@@ -5,9 +5,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const bodyParser = require("body-parser");
 const dotenv = require("dotenv");
-const swaggerJSDoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
-const YAML = require("yamljs");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
 const mysql2 = require("mysql2");
@@ -17,7 +15,6 @@ const { Server } = require("socket.io");
 const http = require("http");
 const moment = require("moment");
 const multer = require("multer");
-const SibApiV3Sdk = require("sib-api-v3-sdk");
 const nodemailer = require("nodemailer");
 const cloudinary = require("cloudinary").v2;
 const streamFier = require("streamifier");
@@ -36,7 +33,7 @@ const DB_NAME_DEV = process.env.DB_NAME_DEV;
 const DB_PORT = process.env.DB_PORT;
 const DB_PASSWORD = process.env.DB_PASSWORD;
 const DB_HOST = process.env.DB_HOST;
-const SECRET_KEY = process.env.SECRET_KEY || "wisdomconnectsecretkey";
+const SECRET_KEY = process.env.SECRET_KEY;
 
 // Frontend environment variables
 const FRONTEND_URL = process.env.FRONTEND_URL;
@@ -63,7 +60,7 @@ const SMTP_PASSWORD = process.env.SMTP_PASSWORD;
 // Email validation regex
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 // bcrypt salt rounds
-const salt = 8;
+const salt = 12;
 
 // Standardized messages
 const messages = {
@@ -85,9 +82,7 @@ module.exports = {
     bodyParser,
     dotenv,
     PORT,
-    swaggerJSDoc,
     swaggerUi,
-    YAML,
     jwt,
     bcrypt,
     mysql2,
@@ -120,7 +115,6 @@ module.exports = {
     CLOUDINARY_FOLDER_NAME,
     CLOUDINARY_URL,
     multer,
-    SibApiV3Sdk,
     BREVO_API_KEY,
     SMTP_SERVER,
     SMTP_PORT,

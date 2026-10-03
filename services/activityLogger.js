@@ -23,7 +23,7 @@ const logActivity = async ({ type, message, userId, targetId, status = "success"
     console.log(`[ACTIVITY LOG] [${type}] [${status}] ${message}`);
     return activity;
   } catch (error) {
-    console.error("Failed to log activity:", error);
+    require('../utils/logger').error("Failed to log activity:", error);
     // Silent fail so we don't break key platform processes
     return null;
   }

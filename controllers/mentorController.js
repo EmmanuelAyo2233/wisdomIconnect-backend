@@ -4,7 +4,6 @@ const Achievement = require("../models/achievement");
 const { Op } = require("sequelize");
 const getAllMentors = async (req, res) => {
   try {
-    console.log("🔑 Logged-in mentee id:", req.user?.id);
 
     const mentors = await Mentor.findAll({
       where: {
@@ -15,7 +14,7 @@ const getAllMentors = async (req, res) => {
           model: User,
           as: "user",
           attributes: ["id", "name", "countryCode", "picture", "status", "userType", "mentorLevel", "sessionsCompleted", "rating"],
-          where: { status: "approved", userType: "mentor" },
+          where: { status: "approved", userType: "mentor", accountStatus:"active",isVerified:true },
         },
       ],
     });
@@ -94,7 +93,7 @@ const getAllMentors = async (req, res) => {
       data: formatted,
     });
   } catch (err) {
-    console.error("❌ Error fetching mentors:", err);
+    require('../utils/logger').error("❌ Error fetching mentors:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
@@ -273,7 +272,7 @@ const getMentorsDetails = async (req, res) => {
 
     res.status(200).json({ status: "success", data: profile });
   } catch (err) {
-    console.error("❌ Error fetching mentor profile:", err);
+    require('../utils/logger').error("❌ Error fetching mentor profile:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };

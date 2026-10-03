@@ -75,13 +75,13 @@ exports.sendMessageRequest = async (req, res) => {
 
         if (notifPrefs.messages_app !== false) {
            const mentorUser = await User.findByPk(mentor.user_id);
-           notificationService.sendMessageRequest(req.user, mentorUser, "mentor").catch(console.error);
+           notificationService.sendMessageRequest(req.user, mentorUser, "mentor").catch(error=>require('../utils/logger').error('Notification failed',error));
         }
 
         res.status(201).json({ status: "success", data: { request } });
     } catch (error) {
-        console.error("Error sending message request:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error sending message request:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -108,8 +108,8 @@ exports.getMentorMessageRequests = async (req, res) => {
 
         res.status(200).json({ status: "success", data: { requests } });
     } catch (error) {
-        console.error("Error getting message requests:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting message requests:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -155,7 +155,7 @@ exports.respondToMessageRequest = async (req, res) => {
         const menteeUser = await User.findByPk(menteeObj.user_id);
 
         if (status === "accepted") {
-            notificationService.sendMessageRequestAccepted(req.user, menteeUser).catch(console.error);
+            notificationService.sendMessageRequestAccepted(req.user, menteeUser).catch(error=>require('../utils/logger').error('Notification failed',error));
         } else {
             // Just standard in-app for declined, or use generic
             await notificationService.sendNotification({
@@ -164,12 +164,12 @@ exports.respondToMessageRequest = async (req, res) => {
               type: "update",
               title: "Message Request Declined",
               message: "❌ Your message request was declined."
-            }).catch(console.error);
+            }).catch(error=>require('../utils/logger').error('Notification failed',error));
         }
 
         res.status(200).json({ status: "success", data: { request } });
     } catch (error) {
-        console.error("Error responding to message request:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error responding to message request:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };

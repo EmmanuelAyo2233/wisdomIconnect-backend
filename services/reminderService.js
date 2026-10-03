@@ -123,7 +123,7 @@ async function sendReminderForAppointment(appointment, window) {
     notified[window].add(appointment.id);
     console.log(`✅ [Reminder:${window}] Sent for appointment ${appointment.id}`);
   } catch (err) {
-    console.error(`❌ [Reminder:${window}] Failed for appointment ${appointment.id}:`, err.message);
+    require('../utils/logger').error(`❌ [Reminder:${window}] Failed for appointment ${appointment.id}:`, err.message);
   }
 }
 
@@ -172,7 +172,7 @@ async function pollReminders() {
       }
     }
   } catch (err) {
-    console.error('❌ [ReminderService] Poll error:', err.message);
+    require('../utils/logger').error('❌ [ReminderService] Poll error:', err.message);
   }
 }
 
@@ -183,7 +183,7 @@ function start() {
   console.log('⏰ [ReminderService] Started — polling every 60 seconds');
   // Run once immediately on start, then repeat every minute
   pollReminders();
-  setInterval(pollReminders, 60 * 1000);
+  return setInterval(pollReminders, 60 * 1000);
 }
 
 module.exports = { start };

@@ -12,21 +12,22 @@ const Wallet = sequelize.define(
             primaryKey: true,
         },
         availableBalance: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             defaultValue: 0.0,
             field: "available_balance"
         },
         pendingBalance: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             defaultValue: 0.0,
             field: "pending_balance"
         },
         totalEarned: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             defaultValue: 0.0,
             field: "total_earned"
         },
         userId: {
+            unique: true,
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {

@@ -1,4 +1,5 @@
-  const { User, Mentee, Mentor } = require("../models");
+const { otp: generateOtp, hashCode, publicUser, accountEligible } = require('../utils/security');
+  const { db, User, Mentee, Mentor } = require("../models");
   const { logActivity } = require("../services/activityLogger");
   const {
     bcrypt,
@@ -38,6 +39,8 @@
   const signup = async (req, res) => {
     try {
       const b = req.body;
+      if(typeof b.email === "string") b.email = b.email.trim().toLowerCase();
+      if(typeof b.password !== "string" || Buffer.byteLength(b.password,"utf8") > 72 || typeof b.name !== "string" || b.name.trim().length > 150) return res.status(400).json({status:"fail",message:"Invalid name or password"});
 
       // Required
       if (!b.name || !b.email || !b.userType || !b.password || !b.confirmPassword) {
@@ -103,6 +106,7 @@
         // Handle file upload if present
         let certUrl = null;
         if (req.file) {
+          require("../utils/uploadValidation").validateFile(req.file);
           certUrl = await new Promise((resolve, reject) => {
             const stream = cloudinary.uploader.upload_stream(
               { folder: "wisdom_connect_credentials" },
@@ -116,18 +120,19 @@
         }
 
         // Create user with pending status (mentor verification)
-        const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+        const verificationToken = generateOtp();
         const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-        const newUser = await User.create({
+        const { newUser, mentor } = await db.sequelize.transaction(async transaction => {
+const newUser = await User.create({
           name: b.name,
           email: b.email,
           password: hashedPassword,
           userType: "mentor",
           status: "pending", // pending approval
-          verificationToken,
+          verificationToken: hashCode(verificationToken),
           verificationExpires,
           isVerified: false,
-        });
+        }, { transaction });
 
         const shortBio = b.shortBio || b.bio || null;
 
@@ -145,13 +150,15 @@
           industries: JSON.stringify(industries),
           fluentIn: JSON.stringify(fluentIn),
           linkedinUrl: b.linkedinUrl || null,
-        });
+        }, { transaction });
+return {newUser,mentor};
+});
 
-      const userResponse = newUser.get({ plain: true });
+      const userResponse = publicUser(newUser);
       delete userResponse.password;
 
       // Send Verification Email
-      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => require('../utils/logger').error("Notification Error:", err));
 
       logActivity({
         type: "USER",
@@ -193,18 +200,19 @@
       if (industries.length > 3) return res.status(400).json({ status: "fail", message: "Select up to 3 industries" });
       if (fluentIn.length > 5) return res.status(400).json({ status: "fail", message: "Select up to 5 fluent languages" });
 
-      const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+      const verificationToken = generateOtp();
       const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-      const newUser = await User.create({
+      const { newUser, mentee } = await db.sequelize.transaction(async transaction => {
+const newUser = await User.create({
         name: b.name,
         email: b.email,
         password: hashedPassword,
         userType: "mentee",
         status: "approved", // mentees auto-approved
-        verificationToken,
+        verificationToken: hashCode(verificationToken),
         verificationExpires,
         isVerified: false,
-      });
+      }, { transaction });
 
       const mentee = await Mentee.create({
           user_id: newUser.id,
@@ -215,14 +223,16 @@
           discipline: JSON.stringify(disciplines),
           industries: JSON.stringify(industries),
           fluentIn: JSON.stringify(fluentIn),
-      });
+      }, { transaction });
+return {newUser,mentee};
+});
 
 
-      const userResponse = newUser.get({ plain: true });
+      const userResponse = publicUser(newUser);
       delete userResponse.password;
 
       // Send Verification Email
-      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error("Notification Error:", err));
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => require('../utils/logger').error("Notification Error:", err));
 
       logActivity({
         type: "USER",
@@ -243,14 +253,15 @@
     console.log("Signup error:", error);
     res.status(500).json({
       message: "Failed to register user",
-      error: error.message,
     });
   }
 };
   // Handles user login
   const login = async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+      const password = req.body.password;
+      if (typeof password !== "string" || Buffer.byteLength(password,"utf8") > 72) return res.status(400).json({message:"Invalid credentials"});
 
       if (!email || !password) {
         return res.status(400).json({ status: "fail", message: "Email and password are required" });
@@ -267,17 +278,19 @@
         ]
       });
       if (!user) {
-        return res.status(404).json({ status: "fail", message: "User not found" });
+        return res.status(401).json({ status: "fail", message: "Invalid email or password" });
       }
 
       const ok = await bcrypt.compare(password, user.password);
       if (!ok) {
-        return res.status(400).json({ status: "fail", message: "Password incorrect" });
+        return res.status(401).json({ status: "fail", message: "Invalid email or password" });
       }
 
       if (user.accountStatus === "suspended" || user.accountStatus === "banned" || user.status === "banned") {
         return res.status(403).json({ status: "fail", message: "Your account has been suspended or banned. Please contact support." });
       }
+
+      if (!user.isVerified) return res.status(403).json({ status: "fail", requiresVerification: true, message: "Please verify your email before signing in." });
 
       if (user.userType === "mentor") {
         await Mentor.update(
@@ -290,10 +303,11 @@
         id: user.id,
         email: user.email,
         userType: user.userType,
-        status: user.status
+        status: user.status,
+        tokenVersion: user.tokenVersion || 0
       };
 
-      const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
+      const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "12h", algorithm: "HS256" });
 
 let banner = null; // <-- single source of truth
 
@@ -340,7 +354,7 @@ return res.status(200).json({
     } 
 catch (error) {
       console.log("Login error:", error);
-      res.status(500).json({ status: "fail", message: "Login failed", error: error.message });
+      res.status(500).json({ status: "fail", message: "Login failed",});
     }
   };
 
@@ -348,7 +362,8 @@ catch (error) {
   // controllers/authController.js
 const logout = async (req, res) => {
   try {
-    const { id, userType } = req.user; // decoded from JWT
+    const { id, userType } = req.user;
+    await User.increment("tokenVersion", { where: { id } }); // decoded from JWT
 
     if (userType === "mentor") {
       await Mentor.update(
@@ -366,7 +381,7 @@ const logout = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Logged out" });
   } catch (err) {
-    console.error("Logout error:", err);
+    require('../utils/logger').error("Logout error:", err);
     res.status(500).json({ status: "fail", message: "Logout failed" });
   }
 };
@@ -378,19 +393,17 @@ const logout = async (req, res) => {
       let idToken = "";
       if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
         idToken = req.headers.authorization.split(" ")[1].trim();
-      } else if (req.cookies && (req.cookies.authToken || req.cookies.token)) {
-        idToken = req.cookies.authToken || req.cookies.token;
       }
 
       if (!idToken) {
         return res.status(401).json({ status: "fail", message: "Please login to get access" });
       }
 
-      const tokenDetails = jwt.verify(idToken, SECRET_KEY);
+      const tokenDetails = jwt.verify(idToken, SECRET_KEY, { algorithms: ["HS256"] });
 
       const freshUser = await User.findOne({
         where: {
-          [Op.or]: [{ id: tokenDetails.id }, { email: tokenDetails.email }],
+          id: tokenDetails.id,
         },
         include: [
           { model: Mentor, as: "mentor", required: false },
@@ -399,8 +412,8 @@ const logout = async (req, res) => {
         attributes: { exclude: ["password"] },
       });
 
-      if (!freshUser) {
-        return res.status(400).json({ status: "fail", message: "User no longer exists" });
+      if (!accountEligible(freshUser) || Number(freshUser.tokenVersion || 0) !== Number(tokenDetails.tokenVersion || 0)) {
+        return res.status(401).json({ status: "fail", message: "Session expired. Please sign in again." });
       }
 
       req.user = freshUser;
@@ -427,88 +440,17 @@ const restrictTo = (...userType) => {
 };
 
 
-  // ---------- Admin actions for mentor verification ----------
-
-  // Approve a mentor (makes them searchable/bookable)
-  const approveMentor = async (req, res) => {
-    try {
-      const { userId } = req.params;
-
-      const user = await User.findByPk(userId);
-      if (!user || user.userType !== "mentor") {
-        return res.status(404).json({ status: "fail", message: "Mentor not found" });
-      }
-
-      await user.update({ status: "approved", approvedAt: new Date() });
-
-      const userResponse = user.get({ plain: true });
-      delete userResponse.password;
-      notificationService.sendMentorApprovalNotification(userResponse).catch(err => console.error("Notification Error:", err));
-
-      return res.status(200).json({
-        status: "success",
-        message: "Mentor approved successfully",
-      });
-    } catch (error) {
-      return res.status(500).json({ status: "fail", message: error.message });
-    }
-  };
-
-  // Reject a mentor → auto-switch to mentee
-  const rejectMentor = async (req, res) => {
-    const t = await User.sequelize.transaction(); // use same sequelize instance
-    try {
-      const { userId } = req.params;
-      const { interests, shortBio } = req.body || {};
-
-      const user = await User.findByPk(userId, { transaction: t });
-      if (!user || user.userType !== "mentor") {
-        await t.rollback();
-        return res.status(404).json({ status: "fail", message: "Mentor not found" });
-      }
-
-      // Remove mentor profile
-      await Mentor.destroy({ where: { user_id: userId }, transaction: t });
-
-      // Switch role to mentee and approve
-      await user.update({ userType: "mentee", status: "approved" }, { transaction: t });
-
-      // Create mentee profile if not exists
-      const existsMentee = await Mentee.findOne({ where: { user_id: userId }, transaction: t });
-      if (!existsMentee) {
-        await Mentee.create(
-          {
-            user_id: userId,
-            interest: JSON.stringify(asArray(interests)), // can be empty array
-            shortBio: shortBio || null,
-          },
-          { transaction: t }
-        );
-      }
-
-      await t.commit();
-
-      const userResponse = user.get({ plain: true });
-      delete userResponse.password;
-      notificationService.sendMentorRejectionNotification(userResponse).catch(err => console.error("Notification Error:", err));
-
-      return res.status(200).json({
-        status: "success",
-        message: "Mentor application rejected. User switched to mentee.",
-      });
-    } catch (error) {
-      await t.rollback();
-      return res.status(500).json({ status: "fail", message: error.message });
-    }
-  };
+  // Legacy endpoints use the same transactional admin policy.
+  const approveMentor = (req,res) => {req.params.id=req.params.userId;return require('./adminController').approveMentor(req,res);};
+  const rejectMentor = (req,res) => {req.params.id=req.params.userId;return require('./adminController').rejectMentor(req,res);};
 
   /**
    * Step 1: User submits email → generate 6-digit OTP → send email
    */
   const forgotPassword = async (req, res) => {
     try {
-      const { email } = req.body;
-      if (!email) return res.status(400).json({ status: 'fail', message: 'Email is required' });
+      const email=typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+      if (!EMAIL_REGEX.test(email)) return res.status(400).json({status:'fail',message:'Valid email is required'});
 
       const user = await User.findOne({ where: { email } });
       // Always return success to prevent email enumeration
@@ -517,12 +459,12 @@ const restrictTo = (...userType) => {
       }
 
       // Generate 6-digit OTP
-      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp = generateOtp();
       // Expire in 15 minutes
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
 
       await user.update({ 
-        passwordResetToken: otp, 
+        passwordResetToken: hashCode(otp), 
         passwordResetExpires: expiresAt 
       });
 
@@ -534,9 +476,9 @@ const restrictTo = (...userType) => {
         html: templates.forgotPassword(user.name, otp)
       });
 
-      return res.status(200).json({ status: 'success', message: 'Password reset code sent to your email.' });
+      return res.status(200).json({ status: 'success', message: 'If this email exists, a reset code has been sent.' });
     } catch (error) {
-      console.error('Forgot password error:', error);
+      require('../utils/logger').error('Forgot password error:', error);
       return res.status(500).json({ status: 'fail', message: 'Failed to process request' });
     }
   };
@@ -556,14 +498,14 @@ const restrictTo = (...userType) => {
         return res.status(400).json({ status: 'fail', message: 'Passwords do not match' });
       }
 
-      if (String(newPassword).length < 8) {
+      if (typeof newPassword !== 'string' || newPassword.length < 8 || Buffer.byteLength(newPassword,'utf8') > 72) {
         return res.status(400).json({ status: 'fail', message: 'Password must be at least 8 characters' });
       }
 
       const user = await User.findOne({ where: { email } });
       if (!user) return res.status(404).json({ status: 'fail', message: 'User not found' });
 
-      if (!user.passwordResetToken || user.passwordResetToken !== otp) {
+      if (!user.passwordResetToken || user.passwordResetToken !== hashCode(otp)) {
         return res.status(400).json({ status: 'fail', message: 'Invalid reset code' });
       }
 
@@ -572,15 +514,17 @@ const restrictTo = (...userType) => {
       }
 
       const hashedPassword = await bcrypt.hash(newPassword, salt);
-      await user.update({ 
+      const [changed] = await User.update({ 
         password: hashedPassword, 
+        tokenVersion: (user.tokenVersion || 0) + 1,
         passwordResetToken: null, 
-        passwordResetExpires: null 
-      });
+        passwordResetExpires: null
+      }, {where:{id:user.id,passwordResetToken:hashCode(otp),passwordResetExpires:{[Op.gt]:new Date()},tokenVersion:user.tokenVersion}});
+      if (!changed) return res.status(400).json({status:'fail',message:'Invalid or expired reset code'});
 
       return res.status(200).json({ status: 'success', message: 'Password reset successfully. You can now log in.' });
     } catch (error) {
-      console.error('Reset password error:', error);
+      require('../utils/logger').error('Reset password error:', error);
       return res.status(500).json({ status: 'fail', message: 'Failed to reset password' });
     }
   };
@@ -608,7 +552,7 @@ const restrictTo = (...userType) => {
          return res.status(400).json({ status: "fail", message: "Email already verified" });
       }
 
-      if (user.verificationToken !== otp) {
+      if (user.verificationToken !== hashCode(otp)) {
          return res.status(400).json({ status: "fail", message: "Invalid or expired OTP" });
       }
 
@@ -616,7 +560,9 @@ const restrictTo = (...userType) => {
          return res.status(400).json({ status: "fail", message: "Verification code has expired. Please request a new one." });
       }
 
-      await user.update({ isVerified: true, verificationToken: null, verificationExpires: null });
+      const [changed] = await User.update({isVerified:true,verificationToken:null,verificationExpires:null},{where:{id:user.id,isVerified:false,verificationToken:hashCode(otp),verificationExpires:{[Op.gt]:new Date()}}});
+      if (!changed) return res.status(400).json({status:'fail',message:'Invalid or expired verification code'});
+      user.isVerified=true;user.verificationToken=null;user.verificationExpires=null;
 
       logActivity({
         type: "USER",
@@ -626,12 +572,12 @@ const restrictTo = (...userType) => {
       });
 
       // Send Appropriate Notification now that they are verified
-      const userResponse = user.get({ plain: true });
+      const userResponse = publicUser(user);
       delete userResponse.password;
       if (user.userType === "mentor") {
-        notificationService.sendMentorApplicationReceived(userResponse).catch(err => console.error(err));
+        notificationService.sendMentorApplicationReceived(userResponse).catch(err => require('../utils/logger').error(err));
       } else {
-        notificationService.sendWelcomeNotification(userResponse, user.userType).catch(err => console.error(err));
+        notificationService.sendWelcomeNotification(userResponse, user.userType).catch(err => require('../utils/logger').error(err));
       }
 
       // 💥 Automatically Log them in after verification! 💥
@@ -644,9 +590,10 @@ const restrictTo = (...userType) => {
         id: user.id,
         email: user.email,
         userType: user.userType,
-        status: user.status
+        status: user.status,
+        tokenVersion: user.tokenVersion || 0
       };
-      const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "7d" });
+      const token = jwt.sign(tokenPayload, SECRET_KEY, { expiresIn: "12h", algorithm: "HS256" });
 
       return res.status(200).json({ 
          status: "success", 
@@ -669,7 +616,7 @@ const restrictTo = (...userType) => {
          }
       });
     } catch (error) {
-      console.error("Email verification error:", error);
+      require('../utils/logger').error("Email verification error:", error);
       res.status(500).json({ status: "fail", message: "Verification failed" });
     }
   };
@@ -686,18 +633,18 @@ const restrictTo = (...userType) => {
         return res.status(400).json({ status: "fail", message: "Email is already verified" });
       }
 
-      const verificationToken = Math.floor(100000 + Math.random() * 900000).toString();
+      const verificationToken = generateOtp();
       const verificationExpires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-      await user.update({ verificationToken, verificationExpires });
+      await user.update({ verificationToken: hashCode(verificationToken), verificationExpires });
 
-      const userResponse = user.get({ plain: true });
+      const userResponse = publicUser(user);
       delete userResponse.password;
 
-      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => console.error(err));
+      notificationService.sendEmailVerification(userResponse, verificationToken).catch(err => require('../utils/logger').error(err));
 
       return res.status(200).json({ status: "success", message: "Verification email resent successfully" });
     } catch (error) {
-      console.error("Resend verification error:", error);
+      require('../utils/logger').error("Resend verification error:", error);
       res.status(500).json({ status: "fail", message: "Failed to resend verification email" });
     }
   };

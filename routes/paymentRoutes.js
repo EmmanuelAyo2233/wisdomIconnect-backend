@@ -19,6 +19,7 @@ router.post(
 );
 
 // ─── Payment Verification ─────────────────────────────────────────────────────
+router.post('/initialize', authentication, paymentLimiter, paymentController.initializePayment);
 router.post('/verify', authentication, paymentLimiter, paymentController.verifyPayment);
 router.post('/sessions/confirm', authentication, paymentLimiter, paymentController.confirmSession);
 router.post('/refund/request', authentication, paymentLimiter, paymentController.requestRefund);

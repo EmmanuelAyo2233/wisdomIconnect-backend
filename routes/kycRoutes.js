@@ -28,7 +28,7 @@ const fileFilter = (_req, file, cb) => {
 const upload = multer({
   storage: multer.memoryStorage(),
   fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+  limits: { fileSize: 5 * 1024 * 1024, fieldNestingDepth: 2, fieldArrayIndexLimit: 100, parts: 45, files: 2, fields: 10, fieldSize: 1024 }, // 5 MB
 });
 
 const kycUpload = upload.fields([
@@ -47,4 +47,5 @@ router.get("/status", restrictTo("mentor"), getMyKycStatus);
 router.get("/admin/all", restrictTo("admin"), getAllKycSubmissions);
 router.patch("/admin/:id/review", restrictTo("admin"), reviewKyc);
 
+router.get("/admin/:id/document/:field", restrictTo("admin"), require("../controllers/kycController").getDocument);
 module.exports = router;

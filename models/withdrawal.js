@@ -19,8 +19,9 @@ const Withdrawal = sequelize.define(
                 key: "id",
             },
         },
+        idempotencyKey: { type: DataTypes.STRING(150), unique: true },
         amount: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             allowNull: false,
         },
         status: {
@@ -40,6 +41,7 @@ const Withdrawal = sequelize.define(
             allowNull: true,
         },
         reference: {
+            unique: true,
             type: DataTypes.STRING,
             allowNull: true,
         },

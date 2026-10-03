@@ -63,6 +63,7 @@ const ChatMessage = sequelize.define(
       defaultValue: false,
     },
 
+    deletedForReceiverId: { type: DataTypes.INTEGER, allowNull: true },
     deletedForSenderId: {
       type: DataTypes.INTEGER,
       allowNull: true,

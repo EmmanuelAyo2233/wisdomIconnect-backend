@@ -1,3 +1,5 @@
+const adminAccounts = require('../services/adminAccountService');
+const { HttpError, respondError } = require('../utils/security');
 // controllers/adminController.js
 const { User, Mentor, Mentee, Appointment, AdminLog, Payment, Report, Review, MentorCommendation, Wallet } = require("../models");
 const notificationService = require("../services/notificationService");
@@ -6,7 +8,7 @@ const notificationService = require("../services/notificationService");
 exports.getAllUsers = async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
-    const limit = Math.min(100, parseInt(req.query.limit) || 20);
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit) || 20));
     const offset = (page - 1) * limit;
 
     const { count, rows: users } = await User.findAndCountAll({
@@ -30,7 +32,7 @@ exports.getAllUsers = async (req, res) => {
       pagination: { total: count, page, limit, totalPages: Math.ceil(count / limit) }
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -61,8 +63,8 @@ exports.getStats = async (req, res) => {
       recentActivity
     });
   } catch (error) {
-    console.error("Error fetching stats:", error);
-    res.status(500).json({ message: "Error fetching stats", error: error.message });
+    require('../utils/logger').error("Error fetching stats:", error);
+    res.status(500).json({ message: "Error fetching stats",});
   }
 };
 
@@ -120,8 +122,8 @@ exports.getPendingMentors = async (req, res) => {
 
     res.json(rows);
   } catch (error) {
-    console.error("Error fetching pending mentors:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching pending mentors:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -144,78 +146,25 @@ exports.getPendingMentors = async (req, res) => {
 
 //     res.json({ message: "Mentor approved successfully", mentor: mentorUser });
 //   } catch (error) {
-//     console.error("Error approving mentor:", error);
-//     res.status(500).json({ message: "Error approving mentor", error: error.message });
+//     require('../utils/logger').error("Error approving mentor:", error);
+//     res.status(500).json({ message: "Error approving mentor",});
 //   }
 // };
 
 // --- Reject mentor: convert to mentee
 // Approve Mentor
-exports.approveMentor = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const mentorUser = await User.findByPk(id);
-    if (!mentorUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // Set approval info
-    mentorUser.status = "approved";      // mark as approved
-    mentorUser.userType = "mentor";      // ensure userType is mentor
-    mentorUser.approvedAt = new Date(); // set the approved date
-
-    await mentorUser.save();             // save once
-
-    const plainUser = mentorUser.get ? mentorUser.get({ plain: true }) : mentorUser;
-    delete plainUser.password;
-    notificationService.sendMentorApprovalNotification(plainUser).catch(err => console.error("Error sending mentor approval notification:", err));
-
-    res.json({ message: "Mentor approved successfully", mentor: mentorUser });
-  } catch (err) {
-    console.error("Error approving mentor:", err);
-    res.status(500).json({ message: "Server error" });
-  }
+exports.approveMentor = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"approve",req.body?.reason || "");
+    notificationService.sendMentorApprovalNotification(user).catch(error=>require('../utils/logger').error('Approval notification failed',error));
+    res.json({message:"Mentor approved",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 // Reject Mentor
-exports.rejectMentor = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // 1️⃣ Check the user
-    const mentorUser = await User.findByPk(id);
-    if (!mentorUser) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    // 2️⃣ Update the user to mentee with approved status so they can continue using the platform
-    mentorUser.userType = "mentee";
-    mentorUser.status = "approved";
-    await mentorUser.save();
-
-    // 3️⃣ Remove their mentor profile
-    await Mentor.destroy({ where: { user_id: id } });
-    
-    // 4️⃣ Create Mentee profile if it doesn't exist
-    const existingMentee = await Mentee.findOne({ where: { user_id: id } });
-    if (!existingMentee) {
-      await Mentee.create({ user_id: id });
-    }
-
-    const plainUser = mentorUser.get ? mentorUser.get({ plain: true }) : mentorUser;
-    delete plainUser.password;
-    notificationService.sendMentorRejectionNotification(plainUser).catch(err => console.error("Error sending mentor rejection notification:", err));
-
-    res.json({
-      message: "Mentor rejected successfully, switched to mentee and removed from mentor list"
-    });
-  } catch (err) {
-    console.error("Error rejecting mentor:", err);
-    res.status(500).json({ message: "Server error" });
-  }
+exports.rejectMentor = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"reject",req.body?.reason || "");
+    res.json({message:"Mentor application rejected; retained as a mentee account",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 // --- Get all approved mentors with mentor table fields merged
 exports.getApprovedMentors = async (req, res) => {
   try {
@@ -268,28 +217,19 @@ exports.getApprovedMentors = async (req, res) => {
 
     res.json(rows);
   } catch (error) {
-    console.error("Error fetching approved mentors:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching approved mentors:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
 
 
 
-exports.deleteMentor = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "Mentor not found" });
-
-    await user.destroy(); // deletes the user
-    res.json({ message: "Mentor deleted successfully" });
-  } catch (err) {
-    console.error("Error deleting mentor:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+exports.deleteMentor = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"deactivate_mentor",req.body?.reason || "");
+    res.json({message:"Mentor deactivated; history retained",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 
 
 // --- Get all rejected mentors
@@ -343,29 +283,17 @@ exports.getRejectedMentors = async (req, res) => {
 
     res.json(rows);
   } catch (error) {
-    console.error("Error fetching rejected mentors:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching rejected mentors:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
 
-exports.reconsiderMentor = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.userType = "mentor";    // revert to mentor
-    user.status = "pending";     // or approved if you want
-    await user.save();
-
-    res.json({ message: "Mentor moved back to pending" });
-  } catch (err) {
-    console.error("Error reconsidering mentor:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+exports.reconsiderMentor = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"reconsider",req.body?.reason || "");
+    res.json({message:"Mentor moved to pending",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 
 
 
@@ -403,82 +331,31 @@ exports.getMentees = async (req, res) => {
 
     res.json(mentees);
   } catch (err) {
-    console.error("Error fetching mentees:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
+    require('../utils/logger').error("Error fetching mentees:", err);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
 
 
 // Delete mentee
-exports.deleteMentee = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const user = await User.findByPk(id);
-    if (!user || user.userType !== "mentee") {
-      return res.status(404).json({ message: "Mentee not found" });
-    }
-
-    await user.destroy();
-    res.json({ message: "Mentee deleted successfully" });
-  } catch (err) {
-    console.error("Error deleting mentee:", err);
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+exports.deleteMentee = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"deactivate_mentee",req.body?.reason || "");
+    res.json({message:"Mentee deactivated; history retained",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 // --- Advanced User Actions ---
 
-exports.suspendUser = async (req, res) => {
-  try {
-    const adminId = req.user.id;
-    const { id } = req.params;
-    const { reason } = req.body;
-
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.accountStatus = "suspended";
-    await user.save();
-
-    await AdminLog.create({
-      adminId,
-      action: "SUSPEND_USER",
-      targetId: id.toString(),
-      details: reason || "No reason provided"
-    });
-
-    res.json({ message: "User suspended successfully", user });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+exports.suspendUser = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"suspend",req.body?.reason || "");
+    res.json({message:"User suspended",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
-exports.banUser = async (req, res) => {
-  try {
-    const adminId = req.user.id;
-    const { id } = req.params;
-    const { reason } = req.body;
-
-    const user = await User.findByPk(id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.accountStatus = "banned";
-    await user.save();
-
-    await AdminLog.create({
-      adminId,
-      action: "BAN_USER",
-      targetId: id.toString(),
-      details: reason || "No reason provided"
-    });
-
-    res.json({ message: "User banned successfully", user });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
+exports.banUser = async (req,res) => {
+  try { const user=await adminAccounts.change(req.user,req.params.id,"ban",req.body?.reason || "");
+    res.json({message:"User banned",user,mentor:user});
+  } catch(error) {respondError(res,error);}
 };
-
 exports.warnUser = async (req, res) => {
   try {
     const adminId = req.user.id;
@@ -499,7 +376,7 @@ exports.warnUser = async (req, res) => {
 
     res.json({ message: "User warned successfully" });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -532,7 +409,7 @@ exports.getUserActivity = async (req, res) => {
       reportsAgainst
     });
   } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -560,8 +437,8 @@ exports.getReviewsForAdmin = async (req, res) => {
     });
     res.json({ reviews });
   } catch (error) {
-    console.error("Error fetching admin reviews:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching admin reviews:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -589,8 +466,8 @@ exports.getCommendationsForAdmin = async (req, res) => {
     });
     res.json({ commendations });
   } catch (error) {
-    console.error("Error fetching admin commendations:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching admin commendations:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -613,7 +490,7 @@ exports.hideReview = async (req, res) => {
     
     res.json({ status: "success", message: "Review hidden successfully ✅" });
   } catch (error) {
-    console.error("Error hiding review:", error);
+    require('../utils/logger').error("Error hiding review:", error);
     res.status(500).json({ status: "error", message: "Failed to hide review" });
   }
 };
@@ -637,7 +514,7 @@ exports.unhideReview = async (req, res) => {
     
     res.json({ status: "success", message: "Review unhidden successfully ✅" });
   } catch (error) {
-    console.error("Error unhiding review:", error);
+    require('../utils/logger').error("Error unhiding review:", error);
     res.status(500).json({ status: "error", message: "Failed to unhide review" });
   }
 };
@@ -661,7 +538,7 @@ exports.hideCommendation = async (req, res) => {
     
     res.json({ status: "success", message: "Commendation hidden successfully ✅" });
   } catch (error) {
-    console.error("Error hiding commendation:", error);
+    require('../utils/logger').error("Error hiding commendation:", error);
     res.status(500).json({ status: "error", message: "Failed to hide commendation" });
   }
 };
@@ -685,7 +562,7 @@ exports.unhideCommendation = async (req, res) => {
     
     res.json({ status: "success", message: "Commendation unhidden successfully ✅" });
   } catch (error) {
-    console.error("Error unhiding commendation:", error);
+    require('../utils/logger').error("Error unhiding commendation:", error);
     res.status(500).json({ status: "error", message: "Failed to unhide commendation" });
   }
 };
@@ -714,149 +591,15 @@ exports.getDisputedSessions = async (req, res) => {
     });
     res.json({ disputes });
   } catch (error) {
-    console.error("Error fetching disputes:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error("Error fetching disputes:", error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
 exports.resolveDispute = async (req, res) => {
-  try {
-    const adminId = req.user.id;
-    const { appointmentId } = req.params;
-    const { resolution } = req.body; // 'release_payout' or 'refund_mentee'
-
-    const appointment = await Appointment.findByPk(appointmentId);
-    if (!appointment) return res.status(404).json({ message: "Appointment not found" });
-    if (appointment.status !== "under_review") {
-        return res.status(400).json({ message: "Appointment is not currently under review" });
-    }
-
-    const payment = await Payment.findOne({ where: { appointmentId } });
-
-    if (resolution === "release_payout") {
-        const Wallet = require("../models/wallet");
-        const mentor = await Mentor.findByPk(appointment.mentorId);
-        
-        appointment.status = "completed";
-        appointment.completionMethod = "admin_release";
-        await appointment.save();
-
-        if (payment && payment.status === "disputed") {
-            payment.status = "released";
-            await payment.save();
-
-            if (mentor) {
-                const mentorWallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
-                if (mentorWallet) {
-                    mentorWallet.pendingBalance -= payment.mentorShare;
-                    mentorWallet.availableBalance += payment.mentorShare;
-                    mentorWallet.totalEarned += payment.mentorShare;
-                    await mentorWallet.save();
-                }
-            }
-
-            const admin = await User.findOne({ where: { userType: 'admin' } });
-            if (admin) {
-                 const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
-                 if (adminWallet) {
-                      adminWallet.pendingBalance -= payment.platformShare;
-                      adminWallet.availableBalance += payment.platformShare;
-                      adminWallet.totalEarned += payment.platformShare;
-                      await adminWallet.save();
-                 }
-            }
-        }
-
-        await AdminLog.create({
-            adminId,
-            action: "RESOLVE_DISPUTE_RELEASE",
-            targetId: appointmentId.toString(),
-            details: "Released payout of " + (payment ? payment.amount : 0) + " to mentor."
-        });
-
-        // ✅ FIXED: Keep reviews visible - session was completed favorably and mentor gets paid
-        return res.json({ message: "Dispute resolved successfully. Payout released to mentor ✅", appointment });
-    } else if (resolution === "refund_mentee") {
-        appointment.status = "cancelled";
-        appointment.completionMethod = "admin_refund";
-        await appointment.save();
-
-        if (payment && payment.status === "disputed") {
-            payment.status = "refunded";
-            await payment.save();
-
-            const mentor = await Mentor.findByPk(appointment.mentorId);
-            if (mentor) {
-                const mentorWallet = await Wallet.findOne({ where: { userId: mentor.user_id } });
-                if (mentorWallet) {
-                    mentorWallet.pendingBalance = Math.max(0, mentorWallet.pendingBalance - payment.mentorShare);
-                    await mentorWallet.save();
-                }
-            }
-
-            const admin = await User.findOne({ where: { userType: 'admin' } });
-            if (admin) {
-                 const adminWallet = await Wallet.findOne({ where: { userId: admin.id } });
-                 if (adminWallet) {
-                      adminWallet.pendingBalance = Math.max(0, adminWallet.pendingBalance - payment.platformShare);
-                      await adminWallet.save();
-                 }
-            }
-
-            // Automated Paystack Refund Call
-            if (payment.reference) {
-                try {
-                    const axios = require("axios");
-                    const paystackSecret = process.env.PAYSTACK_SECRET_KEY || 'sk_test_c869403811e92b7e632034bd5833823162354197';
-                    const refundRes = await axios.post(
-                        'https://api.paystack.co/refund',
-                        { transaction: payment.reference, amount: Math.round(payment.amount * 100) },
-                        { headers: { Authorization: `Bearer ${paystackSecret}` } }
-                    );
-                    if (refundRes.data?.data?.reference) {
-                        payment.refund_reference = refundRes.data.data.reference;
-                        payment.refundedAt = new Date();
-                        await payment.save();
-                    }
-                } catch (pRefErr) {
-                    console.warn("⚠️ Dispute Paystack refund note:", pRefErr.response?.data?.message || pRefErr.message);
-                    payment.refundReason = pRefErr.response?.data?.message || "Manual refund required via Paystack dashboard";
-                    await payment.save();
-                }
-            }
-        }
-
-        await AdminLog.create({
-            adminId,
-            action: "RESOLVE_DISPUTE_REFUND",
-            targetId: appointmentId.toString(),
-            details: "Refunded mentee for payment of " + (payment ? payment.amount : 0)
-        });
-
-        // ✅ FIXED: Hide associated reviews/commendations - session was disputed/refunded so reviews shouldn't show
-        const Review = require("../models/review");
-        const MentorCommendation = require("../models/mentorCommendation");
-        
-        await Review.update(
-            { isHidden: true }, // Hide review since session was disputed/refunded
-            { where: { appointmentId } }
-        );
-        await MentorCommendation.update(
-            { isHidden: true },
-            { where: { appointmentId } }
-        );
-
-        return res.json({ message: "Dispute resolved successfully. Mentee refunded ✅", appointment });
-    } else {
-        return res.status(400).json({ message: "Invalid resolution option. Must be 'release_payout' or 'refund_mentee'" });
-    }
-  } catch (error) {
-    console.error("Error resolving dispute:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
-  }
+  try { if(req.user.userType !== 'admin') throw new HttpError(403,'Admin required'); const finance = require('../services/financeService'); if(req.body.resolution === 'release_payout') await finance.release(req.params.appointmentId,req.user,true); else if(req.body.resolution === 'refund_mentee') await finance.requestRefund(req.params.appointmentId,req.user,'Admin dispute resolution',true); else throw new HttpError(400,'Invalid resolution'); res.json({success:true,message:'Resolution recorded; refunds await provider confirmation'}); } catch (error) { respondError(res, error); }
 };
 
-// --- Get all activities with advanced search and filters
 exports.getActivities = async (req, res) => {
   try {
     const { 
@@ -960,8 +703,8 @@ exports.getActivities = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Error in getActivities:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch activities", error: error.message });
+    require('../utils/logger').error("Error in getActivities:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch activities",});
   }
 };
 
@@ -985,8 +728,8 @@ exports.getRecentActivities = async (req, res) => {
       data: activities
     });
   } catch (error) {
-    console.error("Error in getRecentActivities:", error);
-    res.status(500).json({ success: false, message: "Failed to fetch recent activities", error: error.message });
+    require('../utils/logger').error("Error in getRecentActivities:", error);
+    res.status(500).json({ success: false, message: "Failed to fetch recent activities",});
   }
 };
 // ---------------------------------------------------------------
@@ -1047,8 +790,8 @@ exports.syncMentorLevels = async (req, res) => {
       results,
     });
   } catch (error) {
-    console.error("Error in syncMentorLevels:", error);
-    res.status(500).json({ success: false, message: "Sync failed", error: error.message });
+    require('../utils/logger').error("Error in syncMentorLevels:", error);
+    res.status(500).json({ success: false, message: "Sync failed",});
   }
 };
 

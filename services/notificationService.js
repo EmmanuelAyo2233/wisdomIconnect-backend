@@ -152,12 +152,12 @@ class NotificationService {
           html: emailData.html
         });
       } else if (emailData) {
-        console.warn('⚠️ [sendNotification] emailData provided but recipient email ("to") is missing:', emailData);
+        require('../utils/logger').warn('⚠️ [sendNotification] emailData provided but recipient email ("to") is missing:', emailData);
       }
 
       return inAppNotif;
     } catch (error) {
-      console.error('Error in sendNotification:', error);
+      require('../utils/logger').error('Error in sendNotification:', error);
       throw new Error('Failed to send notification');
     }
   }
@@ -274,7 +274,7 @@ class NotificationService {
     const { user: receiverUser, profileId: receiverProfileId } = await this.resolveUserAndProfile(receiver, receiverType);
 
     if (!receiverUser || !receiverUser.email) {
-      console.error('❌ sendMessageRequest failed: Receiver email not found');
+      require('../utils/logger').error('❌ sendMessageRequest failed: Receiver email not found');
       return;
     }
 
@@ -303,7 +303,7 @@ class NotificationService {
     const { user: menteeUser, profileId: menteeProfileId } = await this.resolveUserAndProfile(mentee, 'mentee');
 
     if (!menteeUser || !menteeUser.email) {
-      console.error('❌ sendMessageRequestAccepted failed: Mentee email not found', { mentee, menteeUser });
+      require('../utils/logger').error('❌ sendMessageRequestAccepted failed: Mentee email not found', { mentee, menteeUser });
       return;
     }
 
@@ -358,7 +358,7 @@ class NotificationService {
         }
       });
     } else {
-      console.error('❌ sendBookingRequest warning: Mentor email not found', { mentor, mentorUser });
+      require('../utils/logger').error('❌ sendBookingRequest warning: Mentor email not found', { mentor, mentorUser });
     }
 
     // 2. Notify Mentee (In-app + Email confirmation)
@@ -379,7 +379,7 @@ class NotificationService {
         }
       });
     } else {
-      console.error('❌ sendBookingRequest warning: Mentee email not found', { mentee, menteeUser });
+      require('../utils/logger').error('❌ sendBookingRequest warning: Mentee email not found', { mentee, menteeUser });
     }
   }
 
@@ -388,7 +388,7 @@ class NotificationService {
     const { user: mentorUser, profileId: mentorProfileId } = await this.resolveUserAndProfile(mentor, 'mentor');
 
     if (!menteeUser || !menteeUser.email) {
-      console.error('❌ sendBookingAccepted failed: Mentee email not found', { mentee, menteeUser });
+      require('../utils/logger').error('❌ sendBookingAccepted failed: Mentee email not found', { mentee, menteeUser });
       return;
     }
 

@@ -9,7 +9,8 @@ const Mentee = sequelize.define(
         bio: { type: DataTypes.TEXT, allowNull: true },
         gender: { type: DataTypes.STRING, allowNull: true },
         role: { type: DataTypes.STRING, allowNull: true },
-        user_id: { type: DataTypes.INTEGER, allowNull: false, references: { model: "user", key: "id" } },
+        user_id: {
+            unique: true, type: DataTypes.INTEGER, allowNull: false, references: { model: "user", key: "id" } },
         interest: { type: DataTypes.JSON, allowNull: true },
         fluentIn: { type: DataTypes.JSON, allowNull: true },
         expertise: { type: DataTypes.JSON, allowNull: true },

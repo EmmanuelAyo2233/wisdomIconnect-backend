@@ -16,4 +16,12 @@ router.post("/:connectionId/upload", authentication, upload.single("file"), uplo
 // 🗑️ Delete entire conversation history for a user
 router.delete("/:connectionId/clear", authentication, deleteConversation);
 
+router.put('/:connectionId/read',authentication,async(req,res)=>{
+ try {
+  const connection=await require('../services/authorizationService').connectionFor(req.user,req.params.connectionId);
+  const {ChatMessage}=require('../models');const {Op}=require('sequelize');
+  await ChatMessage.update({isRead:true},{where:{chatAccessId:connection.id,senderId:{[Op.ne]:req.user.id}}});
+  res.json({success:true});
+ } catch(error) {require('../utils/security').respondError(res,error);}
+});
 module.exports = router;

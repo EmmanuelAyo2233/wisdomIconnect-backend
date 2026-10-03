@@ -1,128 +1,11 @@
+const { respondError } = require('../utils/security');
+const availabilityService = require('../services/availabilityService');
 const Availability = require("../models/availability");
 
 
-exports.createAvailability = async (req, res) => {
-  try {
-    const { date, day, startTime, endTime, status, title, price, session_type, session_title, topic_name } = req.body;
-    const mentorId = req.user.id;
-
-    // 🔒 Check required fields
-    if (!date || !startTime || !endTime) {
-      return res.status(400).json({ message: "Please provide date, startTime, and endTime ❌" });
-    }
-
-    if (!session_type || !['fixed', 'topic'].includes(session_type)) {
-       return res.status(400).json({ message: "Invalid or missing session_type. Must be 'fixed' or 'topic'. ❌" });
-    }
-
-    if (session_type === 'fixed' && !topic_name) {
-       return res.status(400).json({ message: "A custom topic string must be provided when session type is fixed! ❌" });
-    }
-
-    const User = require("../models/user");
-    const Mentor = require("../models/mentor");
-    const user = await User.findByPk(mentorId, { include: [{ model: Mentor, as: "mentor" }] });
-    if (!user) return res.status(404).json({ message: "Mentor not found ❌" });
-
-    // 🛡️ KYC Guard — only for paid slots
-    const slotPrice = price !== null && price !== undefined ? Number(price) : Number(user.mentor?.sessionPrice || 0);
-    if (slotPrice > 0 && user.mentor?.kyc_status !== "verified") {
-      const kycStatusMsg = {
-        not_verified: "You must complete KYC verification before creating paid sessions. Go to your profile → KYC Verification to submit your documents.",
-        pending: "Your KYC verification is currently under review. You can create paid sessions once it is approved.",
-        rejected: `Your KYC was rejected: "${user.mentor?.kyc_rejection_reason || 'See admin note'}". Please re-submit your documents to unlock paid sessions.`,
-      };
-      return res.status(403).json({
-        status: "fail",
-        message: kycStatusMsg[user.mentor?.kyc_status] || "KYC verification required for paid sessions ❌",
-        kyc_status: user.mentor?.kyc_status || "not_verified",
-      });
-    }
-
-    const sessionDuration = parseInt(req.body.custom_duration) || user.mentor?.default_duration || 30;
-    const globalPrice = user.mentor?.sessionPrice || 0;
-    const mentorLevel = user.mentorLevel || "starter";
-
-    // Date Logic
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const selectedDate = new Date(date);
-    selectedDate.setHours(0, 0, 0, 0);
-
-    if (selectedDate.getTime() < today.getTime()) {
-      return res.status(400).json({ message: "Availability cannot be set for past dates! ❌" });
-    }
-
-    // Time Splitting Engine
-    const [startH, startM] = startTime.split(':').map(Number);
-    const [endH, endM] = endTime.split(':').map(Number);
-    let currentStart = new Date(selectedDate);
-    currentStart.setHours(startH, startM, 0, 0);
-    
-    let boundaryEnd = new Date(selectedDate);
-    boundaryEnd.setHours(endH, endM, 0, 0);
-
-    if (currentStart >= boundaryEnd) {
-       return res.status(400).json({ message: "Start time must be before end time! ❌" });
-    }
-
-    const newSlots = [];
-    
-    while (currentStart < boundaryEnd) {
-        let chunkEnd = new Date(currentStart.getTime() + sessionDuration * 60000);
-        
-        // Don't overshoot the boundary
-        if (chunkEnd > boundaryEnd) {
-           break;
-        }
-
-        const formattedStart = `${String(currentStart.getHours()).padStart(2, '0')}:${String(currentStart.getMinutes()).padStart(2, '0')}`;
-        const formattedEnd = `${String(chunkEnd.getHours()).padStart(2, '0')}:${String(chunkEnd.getMinutes()).padStart(2, '0')}`;
-
-        // Check duplicates
-        const existing = await Availability.findOne({
-          where: { mentorId, date, startTime: formattedStart }
-        });
-
-        if (!existing) {
-           newSlots.push({
-              mentorId,
-              date,
-              day,
-              startTime: formattedStart,
-              endTime: formattedEnd,
-              session_type: session_type,
-              session_title: title || 'Mentorship Session',
-              topic_name: session_type === 'fixed' ? topic_name : null,
-              title: title || 'Mentorship Session',
-              price: price !== null && price !== undefined ? price : (mentorLevel === 'starter' ? 0 : globalPrice),
-              status: "available",
-              custom_duration: req.body.custom_duration || null
-           });
-        }
-        
-        currentStart = chunkEnd;
-    }
-
-    if (newSlots.length === 0) {
-       return res.status(400).json({ message: "No valid time chunks could be created. Duration is too long for this block or slots already exist! ❌" });
-    }
-    
-    await Availability.bulkCreate(newSlots);
-
-    return res.status(201).json({
-      message: `${newSlots.length} availability slots generated successfully ✅`,
-      data: newSlots,
-    });
-  } catch (error) {
-    console.error("Error creating availability:", error);
-    res.status(500).json({
-      message: "Failed to create availability ❌",
-      error: error.message,
-    });
-  }
+exports.createAvailability = async (req,res) => {
+  try { const data = await availabilityService.create(req.user,req.body); res.status(201).json({message:"Availability created",data}); } catch(error) {respondError(res,error);}
 };
-
 // ✅ Get all availability for the logged-in mentor
 exports.getMentorAvailability = async (req, res) => {
   try {
@@ -147,65 +30,21 @@ exports.getMentorAvailability = async (req, res) => {
       data: upcomingSlots || [],
     });
   } catch (error) {
-    console.error("Error fetching availability:", error);
+    require('../utils/logger').error("Error fetching availability:", error);
     res.status(500).json({
       message: "Failed to fetch availability ❌",
-      error: error.message,
     });
   }
 };
 
 // ✅ Update availability status or time
-exports.updateAvailabilityStatus = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, startTime, endTime, date } = req.body;
-
-    const slot = await Availability.findByPk(id);
-    if (!slot) {
-      return res.status(404).json({ message: "Availability slot not found ❌" });
-    }
-
-    await slot.update({
-      status: status || slot.status,
-      startTime: startTime || slot.startTime,
-      endTime: endTime || slot.endTime,
-      date: date || slot.date,
-    });
-
-    res.status(200).json({
-      message: "Availability updated successfully ✅",
-      data: slot,
-    });
-  } catch (error) {
-    console.error("Error updating availability:", error);
-    res.status(500).json({
-      message: "Failed to update availability ❌",
-      error: error.message,
-    });
-  }
+exports.updateAvailabilityStatus = async (req,res) => {
+  try { const data = await availabilityService.change(req.user,req.params.id,req.body); res.status(200).json({message:"Availability updated",data}); } catch(error) {respondError(res,error);}
 };
-
 // ✅ (Optional) Delete availability slot
-exports.deleteAvailability = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const slot = await Availability.findByPk(id);
-    if (!slot) {
-      return res.status(404).json({ message: "Availability not found ❌" });
-    }
-
-    await slot.destroy();
-    res.status(200).json({ message: "Availability deleted successfully ✅" });
-  } catch (error) {
-    console.error("Error deleting availability:", error);
-    res.status(500).json({
-      message: "Failed to delete availability ❌",
-      error: error.message,
-    });
-  }
+exports.deleteAvailability = async (req,res) => {
+  try { const data = await availabilityService.change(req.user,req.params.id,{},true); res.status(200).json({message:"Availability deleted",data}); } catch(error) {respondError(res,error);}
 };
-
 // ✅ Get availability by mentor ID (for mentees to view)
 exports.getAvailabilityByMentorId = async (req, res) => {
   try {
@@ -289,11 +128,10 @@ exports.getAvailabilityByMentorId = async (req, res) => {
       data: formatted,
     });
   } catch (error) {
-    console.error("Error fetching mentor availability:", error);
+    require('../utils/logger').error("Error fetching mentor availability:", error);
     return res.status(500).json({
       status: "error",
       message: "Failed to fetch mentor availability ❌",
-      error: error.message,
     });
   }
 };

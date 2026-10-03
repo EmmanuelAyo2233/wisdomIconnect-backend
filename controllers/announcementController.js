@@ -56,8 +56,8 @@ exports.createAnnouncement = async (req, res) => {
 
     res.status(201).json({ message: "Announcement created and broadcasted successfully", data: announcement });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error(error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -69,8 +69,8 @@ exports.getAllAnnouncements = async (req, res) => {
     });
     res.json({ data: announcements });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error(error);
+    res.status(500).json({ message: "Server error",});
   }
 };
 
@@ -90,7 +90,7 @@ exports.getUserAnnouncements = async (req, res) => {
      });
      res.json({ data: announcements });
    } catch (error) {
-     res.status(500).json({ message: "Server error", error: error.message });
+     res.status(500).json({ message: "Server error",});
    }
 };
 
@@ -114,7 +114,7 @@ exports.deleteAnnouncement = async (req, res) => {
 
     res.status(200).json({ message: "Announcement deleted successfully" });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    require('../utils/logger').error(error);
+    res.status(500).json({ message: "Server error",});
   }
 };

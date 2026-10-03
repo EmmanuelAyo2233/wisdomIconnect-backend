@@ -24,6 +24,7 @@ const router = express.Router();
 
 router.post(
     "/register",
+    authLimiter,
     upload.single("certificate"),
     sanitizeMiddleware(["name", "email", "bio", "role", "expertise"]),
     signup
@@ -38,7 +39,7 @@ router.route("/login").post(
 router.post("/forgot-password", authLimiter, sanitizeMiddleware(["email"]), forgotPassword);
 router.post("/reset-password", authLimiter, resetPassword);
 router.post("/logout",  authentication, logout);
-router.post("/verify-email", verifyEmail);
+router.post("/verify-email", authLimiter, verifyEmail);
 router.post("/resend-verification", authLimiter, sanitizeMiddleware(["email"]), resendVerification);
 
 // Admin-only routes for mentor approval/rejection

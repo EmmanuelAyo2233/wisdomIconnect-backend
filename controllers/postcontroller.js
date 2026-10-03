@@ -17,7 +17,6 @@ const getAllPost = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to load posts",
-            error: error.message,
         });
     }
 };
@@ -46,7 +45,6 @@ const getFullPost = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to load post details",
-            error: error.message,
         });
     }
 };
@@ -78,7 +76,6 @@ const createPost = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to create post",
-            error: error.message,
         });
     }
 };
@@ -138,7 +135,6 @@ const updatePost = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to update post",
-            error: error.message,
         });
     }
 };
@@ -180,7 +176,6 @@ const deletePost = async (req, res) => {
     } catch (error) {
         res.status(500).json({
             message: "Failed to delete post",
-            error: error.message,
         });
     }
 };

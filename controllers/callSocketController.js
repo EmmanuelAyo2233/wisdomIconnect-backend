@@ -1,58 +1,71 @@
+const { meetingFor } = require('../services/authorizationService');
 exports.setupCallSocket = (io) => {
     io.of("/chat").on("connection", (socket) => {
+        const register = (event, handler) => socket.on(event, async (payload = {}) => {
+            try {
+                if (!payload || typeof payload !== 'object' || JSON.stringify(payload).length > 64000) throw new Error('Invalid event');
+                if(event !== 'leaveRoom') await meetingFor(socket.user, payload.meetingId);
+                if (event !== 'joinRoom' && !socket.rooms.has(payload.meetingId)) throw new Error('Join first');
+                if (['forceMute','forceVideoOff'].includes(event) && socket.user.userType !== 'mentor') throw new Error('Mentor only');
+                await handler({ ...payload, userId: socket.user.id, role: socket.user.userType });
+            } catch { socket.emit('error', { message: 'This call action is unavailable.' }); }
+        });
 
-        socket.on("joinRoom", ({ meetingId, userId, role }) => {
+        register("joinRoom", ({ meetingId, userId, role }) => {
             socket.join(meetingId);
             socket.to(meetingId).emit("userJoined", { userId, role });
         });
 
-        socket.on("offer", ({ meetingId, offer }) => {
+        register("offer", ({ meetingId, offer }) => {
             socket.to(meetingId).emit("offer", offer);
         });
 
-        socket.on("answer", ({ meetingId, answer }) => {
+        register("answer", ({ meetingId, answer }) => {
             socket.to(meetingId).emit("answer", answer);
         });
 
-        socket.on("ice-candidate", ({ meetingId, candidate }) => {
+        register("ice-candidate", ({ meetingId, candidate }) => {
             socket.to(meetingId).emit("ice-candidate", candidate);
         });
 
-        socket.on("endCall", ({ meetingId }) => {
+        register("endCall", ({ meetingId }) => {
             // Broadcast only to OTHER participants in the room, not back to the caller
             socket.to(meetingId).emit("callEnded");
         });
 
-        socket.on("forceMute", ({ meetingId }) => {
+        register("forceMute", ({ meetingId }) => {
             socket.to(meetingId).emit("forceMute");
         });
 
-        socket.on("forceVideoOff", ({ meetingId }) => {
+        register("forceVideoOff", ({ meetingId }) => {
             socket.to(meetingId).emit("forceVideoOff");
         });
 
         // Relay media state changes (camera/mic/screen share toggle)
-        socket.on("mediaStateChanged", ({ meetingId, ...state }) => {
+        register("mediaStateChanged", ({ meetingId, videoOn, audioOn, screenSharing }) => {
+            const state={senderUserId:socket.user.id};
+            for(const [key,value] of Object.entries({videoOn,audioOn,screenSharing})) if(typeof value === "boolean") state[key]=value;
             socket.to(meetingId).emit("mediaStateChanged", state);
         });
 
         // Relay hand raising event
-        socket.on("raiseHand", ({ meetingId, userId, isRaised }) => {
+        register("raiseHand", ({ meetingId, userId, isRaised }) => {
             socket.to(meetingId).emit("raiseHand", { userId, isRaised });
         });
 
         // Relay emoji reactions
-        socket.on("emojiReaction", ({ meetingId, userId, emoji }) => {
+        register("emojiReaction", ({ meetingId, userId, emoji }) => {
             socket.to(meetingId).emit("emojiReaction", { userId, emoji });
         });
 
         // In-call chat message
-        socket.on("callChatMessage", ({ meetingId, message }) => {
+        register("callChatMessage", ({ meetingId, message }) => {
             // Broadcast to all others in the room
-            socket.to(meetingId).emit("callChatMessage", message);
+            if(typeof message?.text!=="string" || !message.text.trim() || message.text.length>2000) return;
+            socket.to(meetingId).emit("callChatMessage", {id:require("crypto").randomUUID(),text:message.text,senderName:socket.user.name,senderImage:socket.user.picture,senderId:socket.user.id,timestamp:new Date().toISOString()});
         });
 
-        socket.on("leaveRoom", ({ meetingId, userId }) => {
+        register("leaveRoom", ({ meetingId, userId }) => {
             socket.leave(meetingId);
             socket.to(meetingId).emit("userLeft", { userId });
         });

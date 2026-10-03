@@ -37,6 +37,8 @@ const User = sequelize.define(
             allowNull: false,
             defaultValue: "active",
         },
+        tokenVersion: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+        countryCode: { type: DataTypes.STRING(2), allowNull: false, defaultValue: 'NG' },
        picture: {
         type: DataTypes.STRING,
         allowNull: true,

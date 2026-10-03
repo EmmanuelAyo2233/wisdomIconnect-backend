@@ -506,3 +506,9 @@ bookingAccepted: (menteeName, mentorName, sessionTitle, dateTime, joinUrl, goals
                            )
 };
 
+
+// Names, topics and other user-supplied strings cannot inject markup into email.
+const escapeTemplateValue = require('./security').escapeHtml;
+for(const [name,template] of Object.entries(module.exports)) {
+ if(typeof template === 'function') module.exports[name] = (...args) => template(...args.map(value=>typeof value==='string'?escapeTemplateValue(value):value));
+}

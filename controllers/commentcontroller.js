@@ -16,7 +16,6 @@ const getAllComment = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             message: "Failed to load all comments",
-            error: error.message,
         });
     }
 };
@@ -45,7 +44,6 @@ const getFullComment = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             message: "Failed to get comment",
-            error: error.message,
         });
     }
 };
@@ -109,7 +107,7 @@ const createComment = async (req, res) => {
                              <p><a href="${process.env.FRONTEND_URL}/playbooks" style="color:#2563eb;font-weight:bold;">View Comment</a></p>
                            </div>`
                 }
-            }).catch(err => console.error("Failed to send comment notification:", err));
+            }).catch(err => require('../utils/logger').error("Failed to send comment notification:", err));
         }
 
         return res.status(201).json({
@@ -122,7 +120,6 @@ const createComment = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             message: "Failed to post comments",
-            error: error.message,
         });
     }
 };
@@ -169,7 +166,6 @@ const updateComment = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             message: "Failed to update comment",
-            error: error.message,
         });
     }
 };
@@ -215,7 +211,6 @@ const deleteComment = async (req, res) => {
     } catch (error) {
         return res.status(500).json({
             message: "Failed to delete comment",
-            error: error.message,
         });
     }
 };

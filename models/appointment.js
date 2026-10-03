@@ -12,6 +12,8 @@ const Appointment = sequelize.define(
       autoIncrement: true,
       primaryKey: true,
     },
+    slotId: { type: DataTypes.INTEGER, allowNull: true, references: { model: "availability", key: "id" } },
+    price: { type: DataTypes.DECIMAL(14,2), defaultValue: 0 },
     date: {
       type: DataTypes.DATEONLY,
       allowNull: false,

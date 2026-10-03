@@ -183,8 +183,8 @@ User.hasMany(Activity, { foreignKey: "userId", as: "activities" });
 Activity.belongsTo(User, { foreignKey: "userId", as: "user" });
 
 // KYC associations
-Mentor.hasOne(MentorKyc, { foreignKey: "mentor_id", as: "kyc" });
-MentorKyc.belongsTo(Mentor, { foreignKey: "mentor_id", as: "mentor" });
+Mentor.hasOne(MentorKyc, { foreignKey: "mentorId", as: "kyc" });
+MentorKyc.belongsTo(Mentor, { foreignKey: "mentorId", as: "mentor" });
 
 module.exports = {
     db,

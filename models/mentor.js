@@ -20,6 +20,7 @@ const Mentor = sequelize.define(
         },
 
         user_id: {
+            unique: true,
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {

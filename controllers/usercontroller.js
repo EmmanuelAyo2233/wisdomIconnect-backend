@@ -158,7 +158,7 @@ const getdetails = async (req, res) => {
        try {
           await UserAchievement.bulkCreate(newBadgesToAward, { ignoreDuplicates: true });
        } catch(bulkErr) {
-          console.error("bulkCreate error:", bulkErr.message);
+          require('../utils/logger').error("bulkCreate error:", bulkErr.message);
           // Insert one-by-one as fallback
           for (const badge of newBadgesToAward) {
              try { await UserAchievement.create(badge); } catch(e) {}
@@ -228,7 +228,7 @@ const getdetails = async (req, res) => {
       data: userData,
     });
   } catch (err) {
-    console.error("Error in getdetails:", err);
+    require('../utils/logger').error("Error in getdetails:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };
@@ -242,7 +242,7 @@ const getAllPlatformAchievements = async (req, res) => {
       data: achievements
     });
   } catch (err) {
-    console.error("Error fetching all platform achievements:", err);
+    require('../utils/logger').error("Error fetching all platform achievements:", err);
     res.status(500).json({ status: "fail", message: "Server error fetching achievements" });
   }
 };
@@ -252,14 +252,18 @@ const updateDetails = async (req, res) => {
   try {
     const userId = req.user.id;
     const body = req.body;
+      for(const key of ['autoAccept','instantBooking','showInExplore','showPricing']) if(body[key]!==undefined && typeof body[key] !== 'boolean') return res.status(400).json({status:'fail',message:`${key} must be a boolean`});
+      if(body.maxSessionsPerDay!==undefined && (!Number.isInteger(Number(body.maxSessionsPerDay)) || Number(body.maxSessionsPerDay)<1 || Number(body.maxSessionsPerDay)>24)) return res.status(400).json({status:'fail',message:'Daily session limit must be between 1 and 24'});
 
     const user = await User.findByPk(userId);
     if (!user) return res.status(404).json({ status: "error", message: "User not found" });
 
     // Update base User fields only if provided
+    if(body.name!==undefined && (typeof body.name!=='string' || body.name.trim().length<2 || body.name.length>150)) return res.status(400).json({status:'fail',message:'Name must contain 2 to 150 characters'});
+    if(body.linkedinUrl) {try {const url=new URL(body.linkedinUrl);if(!['https:','http:'].includes(url.protocol)) throw new Error();}catch{return res.status(400).json({status:'fail',message:'Enter a valid HTTP or HTTPS profile link'});}}
+    if(body.sessionPrice!==undefined && (!Number.isFinite(Number(body.sessionPrice)) || Number(body.sessionPrice)<0 || Number(body.sessionPrice)>50000)) return res.status(400).json({status:'fail',message:'Invalid session price'});
     user.name = body.name || user.name;
-    user.email = body.email || user.email;
-    if (body.password) user.password = body.password;
+    if ((body.email !== undefined && body.email !== user.email) || (body.password !== undefined && body.password !== "")) return res.status(400).json({ status: "fail", message: "Use the dedicated email or password change action." });
     await user.save();
 
     // Update Mentor or Mentee
@@ -272,7 +276,7 @@ const updateDetails = async (req, res) => {
         mentor.role = body.occupation || body.role || mentor.role;
         mentor.yearsOfExperience = body.yearsOfExperience ?? mentor.yearsOfExperience ?? 0;
         mentor.available = body.available ?? mentor.available;
-        mentor.slotBooked = body.slotBooked ?? mentor.slotBooked;
+        // Booking counters are derived by the backend.
         mentor.phone = body.phone || mentor.phone;
         mentor.linkedinUrl = body.linkedinUrl || mentor.linkedinUrl || "";
         if (body.expertise !== undefined) mentor.expertise = safeParseJSON(body.expertise);
@@ -318,11 +322,10 @@ const updateDetails = async (req, res) => {
       message: "User details updated successfully",
     });
   } catch (err) {
-    console.error("Update profile error:", err);
+    require('../utils/logger').error("Update profile error:", err);
     return res.status(500).json({
       status: "error",
       message: "Failed to update details",
-      error: err.message,
     });
   }
 
@@ -337,49 +340,21 @@ const uploadprofilePicture = async (req, res) => {
       return res.status(400).json({ status: "fail", message: "No image provided" });
     }
 
-    const publicId = `emmanuel_profile_${user.id}`; // stable id per user
+    require("../utils/uploadValidation").validateFile(file,true);
+      const publicId = `wisicom_profile_${user.id}`; // stable id per user
 
-    const stream = cloudinary.uploader.upload_stream(
-      {
-        folder: CLOUDINARY_FOLDER_NAME,
-        resource_type: "image",
-        public_id: publicId,
-        overwrite: true,
-        invalidate: true, // ✅ ask CDN to invalidate cached version
-      },
-      async (error, result) => {
-        if (error) {
-          console.error("Cloudinary upload error:", error);
-          return res.status(500).json({ status: "error", message: "Cloudinary upload failed" });
-        }
-
-        const imageUrl = result.secure_url; // has a new /v####/ version every overwrite
-
-        // ✅ write to the right column
-        const [updatedRows] = await User.update(
-          { picture: imageUrl },
-          { where: { id: user.id } }
-        );
-
-        if (updatedRows === 0) {
-          return res.status(404).json({ status: "fail", message: "User not found" });
-        }
-
-        return res.status(200).json({
-          status: "success",
-          message: "Profile picture updated successfully",
-          imageUrl,
-        });
-      }
-    );
-
-    streamifier.createReadStream(file.buffer).pipe(stream);
+    const result = await new Promise((resolve,reject) => {
+      const stream=cloudinary.uploader.upload_stream({folder:CLOUDINARY_FOLDER_NAME,resource_type:'image',public_id:publicId,overwrite:true,invalidate:true},(error,result)=>error ? reject(error) : resolve(result));
+      const input=streamifier.createReadStream(file.buffer);input.on('error',reject);stream.on('error',reject);input.pipe(stream);
+    });
+    const [updatedRows]=await User.update({picture:result.secure_url},{where:{id:user.id}});
+    if (!updatedRows) return res.status(404).json({status:'fail',message:'User not found'});
+    return res.json({status:'success',message:'Profile picture updated successfully',imageUrl:result.secure_url});
   } catch (err) {
-    console.error("Upload profile picture error:", err);
+    require('../utils/logger').error("Upload profile picture error:", err);
     return res.status(500).json({
       status: "error",
       message: "Failed to update profile picture",
-      error: err.message,
     });
   }
 };
@@ -411,17 +386,16 @@ const deleteAccount = async (req, res) => {
       });
     }
 
-    await user.destroy();
+    await user.update({accountStatus:"suspended",tokenVersion:(user.tokenVersion||0)+1});
 
     return res.status(201).json({
       status: "success",
-      message: "Account deleted successfully",
+      message: "Account deactivated. Contact support for data erasure and settlement review.",
     });
   } catch (error) {
     return res.status(500).json({
       status: "error",
       message: "Failed to delete account",
-      error: error.message,
     });
   }
 };
@@ -435,15 +409,15 @@ const changePassword = async (req, res) => {
     if (newPassword.length < 8)
       return res.status(400).json({ status: 'fail', message: 'Password must be at least 8 characters' });
 
-    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password'] });
+    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password', 'tokenVersion'] });
     const valid = await bcrypt.compare(currentPassword, user.password);
     if (!valid) return res.status(401).json({ status: 'fail', message: 'Current password is incorrect' });
 
     const hashed = await bcrypt.hash(newPassword, 10);
-    await user.update({ password: hashed });
+    await user.update({ password: hashed, tokenVersion: (user.tokenVersion || 0) + 1 });
     return res.status(200).json({ status: 'success', message: 'Password updated successfully' });
   } catch (err) {
-    console.error('changePassword error:', err);
+    require('../utils/logger').error('changePassword error:', err);
     return res.status(500).json({ status: 'error', message: 'Failed to change password' });
   }
 };
@@ -455,17 +429,20 @@ const changeEmail = async (req, res) => {
     if (!newEmail || !password)
       return res.status(400).json({ status: 'fail', message: 'newEmail and password are required' });
 
-    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password', 'email'] });
+    const user = await User.findByPk(req.user.id, { attributes: ['id', 'password', 'email', 'name', 'tokenVersion'] });
     const valid = await bcrypt.compare(password, user.password);
     if (!valid) return res.status(401).json({ status: 'fail', message: 'Password is incorrect' });
 
     const exists = await User.findOne({ where: { email: newEmail } });
     if (exists) return res.status(400).json({ status: 'fail', message: 'Email already in use' });
 
-    await user.update({ email: newEmail });
-    return res.status(200).json({ status: 'success', message: 'Email updated successfully' });
+    if(typeof newEmail !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) return res.status(400).json({status:'fail',message:'Invalid email address'});
+      const code = require('../utils/security').otp();
+      await user.update({ email: newEmail.trim().toLowerCase(), isVerified:false, tokenVersion:(user.tokenVersion||0)+1, verificationToken:require('../utils/security').hashCode(code), verificationExpires:new Date(Date.now()+15*60000) });
+      await require('../services/notificationService').sendEmailVerification({name:user.name,email:user.email,id:user.id},code);
+    return res.status(200).json({ status: 'success', message: 'Check your new email to verify your address before signing in' });
   } catch (err) {
-    console.error('changeEmail error:', err);
+    require('../utils/logger').error('changeEmail error:', err);
     return res.status(500).json({ status: 'error', message: 'Failed to change email' });
   }
 };
@@ -475,6 +452,8 @@ const updateMentorSettings = async (req, res) => {
   try {
     const userId = req.user.id;
     const body = req.body;
+      for(const key of ['autoAccept','instantBooking','showInExplore','showPricing']) if(body[key]!==undefined && typeof body[key] !== 'boolean') return res.status(400).json({status:'fail',message:`${key} must be a boolean`});
+      if(body.maxSessionsPerDay!==undefined && (!Number.isInteger(Number(body.maxSessionsPerDay)) || Number(body.maxSessionsPerDay)<1 || Number(body.maxSessionsPerDay)>24)) return res.status(400).json({status:'fail',message:'Daily session limit must be between 1 and 24'});
 
     if (req.user.userType === 'mentor') {
       const mentor = await Mentor.findOne({ where: { user_id: userId } });
@@ -505,7 +484,7 @@ const updateMentorSettings = async (req, res) => {
 
     return res.status(200).json({ status: 'success', message: 'Settings updated successfully' });
   } catch (err) {
-    console.error('updateSettings error:', err);
+    require('../utils/logger').error('updateSettings error:', err);
     return res.status(500).json({ status: 'error', message: 'Failed to update settings' });
   }
 };
@@ -570,7 +549,7 @@ const getMenteePublicProfile = async (req, res) => {
         order: [["createdAt", "DESC"]]
       });
     } catch (e) {
-      console.error("Error fetching commendations:", e.message);
+      require('../utils/logger').error("Error fetching commendations:", e.message);
     }
 
     // Achievements
@@ -591,7 +570,7 @@ const getMenteePublicProfile = async (req, res) => {
         }));
       }
     } catch (e) {
-      console.error("Error fetching achievements:", e.message);
+      require('../utils/logger').error("Error fetching achievements:", e.message);
     }
 
     const safeParse = (val) => {
@@ -635,7 +614,7 @@ const getMenteePublicProfile = async (req, res) => {
 
     res.status(200).json({ status: "success", data: profile });
   } catch (err) {
-    console.error("❌ Error fetching mentee public profile:", err);
+    require('../utils/logger').error("❌ Error fetching mentee public profile:", err);
     res.status(500).json({ status: "fail", message: "Server error" });
   }
 };

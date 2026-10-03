@@ -37,30 +37,19 @@ const callRoutes = require("./routes/callRoutes");
 const app = express();
 
 // --- Enhanced CORS Configuration ---
-const allowedOrigins = [
-    "http://127.0.0.1:5503",
-    "http://localhost:5503",
-    "http://127.0.0.1:5500",
-    "http://localhost:5500",
-    "http://127.0.0.1:5173",
-    "http://localhost:5173",
-    "https://wisdom-iconnect.vercel.app",
-    "https://wisdom-iconnect-1hz4dgiqz-emmanuels-projects-8000beb3.vercel.app",
-    FRONTEND_URL,
-].filter(Boolean);
+const allowedOrigins = [FRONTEND_URL, ...(process.env.CORS_ORIGINS || '').split(','), ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:5173','http://127.0.0.1:5173'] : [])].map(s => s?.trim()).filter(Boolean);
+if(process.env.TRUST_PROXY_HOPS) app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS));
 
 const corsOptions = {
     origin: (origin, callback) => {
         // Allow requests with no origin (e.g. mobile apps, curl, Render health checks)
         if (!origin) return callback(null, true);
-        // Allow any Vercel preview/production deployment
-        if (/\.vercel\.app$/.test(origin)) return callback(null, true);
         if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new Error(`CORS: Origin '${origin}' not allowed`));
+        return callback(new (require('./utils/security').HttpError)(403,'Origin not allowed'));
     },
-    credentials: true,
+    credentials: false,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Idempotency-Key"],
 };
 
 // Handle OPTIONS preflight BEFORE helmet or any other middleware
@@ -87,24 +76,13 @@ app.use('/uploads', express.static('uploads')); // serve images
 
 // Setup Websocket.io connection for chat
 const server = http.createServer(app);
-const io = new Server(server, {
-    cors: {
-        origin: [
-            "http://localhost:5500",
-            "http://127.0.0.1:5500",
-            "http://127.0.0.1:5000",
-            "http://localhost:5000",
-            "http://127.0.0.1:5173",
-            "http://localhost:5173",
-            "https://wisdom-iconnect.vercel.app",
-            "https://wisdom-iconnect-64aajq8h9-emmanuels-projects-8000beb3.vercel.app",
-            /\.vercel\.app$/, // Allows any Vercel preview branch
-            FRONTEND_URL,
-        ],
-        credentials: true,
-        methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allowedHeaders: ["Content-Type", "Authorization"],
-    },
+const io = new Server(server, { cors: corsOptions, maxHttpBufferSize: 64000 });
+app.use(API_URL, (req,res,next) => req.path === '/payments/webhook' ? next() : require('./config/rateLimiter').generalLimiter(req,res,next));
+// Never serialize security credentials, even in nested Sequelize associations.
+app.use((req,res,next) => {
+ const original = res.json.bind(res);
+ res.json = value => original(JSON.parse(JSON.stringify(value, (key, item) => ['password','verificationToken','passwordResetToken','verificationExpires','passwordResetExpires','tokenVersion','stack','sql'].includes(key) ? undefined : item)));
+ next();
 });
 
 // --- API Routes ---
@@ -112,6 +90,7 @@ app.get("/", (req, res) => {
     res.status(200).json({ message: "Backend is working" });
 });
 
+app.use(`${API_URL}/support`,require("./routes/supportRoutes"));
 app.use(`${API_URL}/auth`, authRoutes);
 app.use(`${API_URL}/user`, userRoutes);
 app.use(`${API_URL}/mentees`, menteeRoutes);
@@ -178,14 +157,15 @@ app.get("/health", (req, res) => {
 
 // --- Global Error Handling Middleware ---
 app.use((err, req, res, next) => {
-    console.error("Unhandled error:", err);
-    const statusCode = err.statusCode || 500;
+    require('./utils/logger').error('Unhandled request error',err);
+    if (res.headersSent) return next(err);
+    const statusCode = err.code?.startsWith('LIMIT_') ? 413 : err.statusCode || err.status || 500;
     const response = {
         status: "fail",
-        message: err.message || "Internal server error"
+        message: statusCode < 500 ? (err.code?.startsWith("LIMIT_") ? "Upload exceeds permitted limits" : err instanceof require("./utils/security").HttpError ? err.message : "Invalid request payload") : "Internal server error"
     };
     if (process.env.NODE_ENV !== "production" && err.stack) {
-        response.stack = err.stack;
+        // Internal stack traces stay in server logs.
     }
     res.status(statusCode).json(response);
 });
@@ -199,7 +179,7 @@ const { setupCallSocket } = require("./controllers/callSocketController");
 setupCallSocket(io);
 
 // --- Swagger Documentation ---
-autoSwaggerJs({
+if (process.env.NODE_ENV !== "production") autoSwaggerJs({
     app,
     version: "1.0.0",
     description: "Wisdom Connect API documentation and testing",
@@ -217,14 +197,15 @@ autoSwaggerJs({
     swaggerOptions: {
         cors: {
             origin: FRONTEND_URL,
-            credentials: true,
+            credentials: false,
             methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         },
     },
 });
 
 // --- Synchronize Database & Start Server ---
-db.sequelize.sync() // creates missing tables but avoids complex alterations to existing ones
+let webhookTimer, reminderTimer;
+db.sequelize.authenticate()
     .then(async () => {
         console.log("✅ Database synchronized successfully (Tables created/updated)");
 
@@ -236,9 +217,19 @@ db.sequelize.sync() // creates missing tables but avoids complex alterations to 
 
             // Start session call reminder scheduler (24h, 1h, 10min notifications)
             const reminderService = require('./services/reminderService');
-            reminderService.start();
+            reminderTimer = reminderService.start();
+            webhookTimer = require('./services/webhookService').start();
         });
     })
-    .catch((err) => {
+    .catch(async (err) => {
         console.error("❌ Database synchronization failed:", err);
     });
+
+let shuttingDown=false;
+async function shutdown() {
+ if(shuttingDown) return;shuttingDown=true;
+ clearInterval(webhookTimer);clearInterval(reminderTimer);
+ const timeout=setTimeout(()=>process.exit(1),15000);timeout.unref();
+ io.close(async()=>{try {await db.sequelize.close();clearTimeout(timeout);} catch {process.exitCode=1;}});
+}
+process.on('SIGTERM',shutdown);process.on('SIGINT',shutdown);

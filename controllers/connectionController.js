@@ -7,6 +7,7 @@ const Notification = require("../models/notification");
 exports.requestConnection = async (req, res) => {
   try {
     const { mentorUserId } = req.params;
+    if (req.body.initialMessage !== undefined) req.body.initialMessage=require('../utils/security').text(req.body.initialMessage,'Message',10000,false);
     const menteeUserId = req.user.id;
 
     const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
@@ -49,11 +50,11 @@ exports.requestConnection = async (req, res) => {
     const notificationService = require("../services/notificationService");
     const menteeUserObj = await User.findByPk(menteeUserId);
     const mentorUserObj = await User.findByPk(mentorUserId);
-    await notificationService.sendMessageRequest(menteeUserObj, mentorUserObj, "mentor");
+    notificationService.sendMessageRequest(menteeUserObj, mentorUserObj, 'mentor').catch(error=>require('../utils/logger').error('Connection notification failed',error));
 
     res.status(201).json({ status: "success", data: connection });
   } catch (error) {
-    console.error("Connection request error:", error);
+    require('../utils/logger').error("Connection request error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -69,7 +70,7 @@ exports.respondConnection = async (req, res) => {
     }
 
     const mentor = await Mentor.findOne({ where: { user_id: mentorUserId } });
-    
+    if (!mentor) return res.status(403).json({message:"Mentor profile required"});
     const connection = await Connection.findOne({
       where: { id: connectionId, mentorId: mentor.id }
     });
@@ -83,13 +84,12 @@ exports.respondConnection = async (req, res) => {
     
     if (status === "accepted") {
         // Send nice email + notification
-        const menteeUser = await User.findByPk(connection.menteeId, { include: [Mentee] }); // Wait! menteeId is Mentee.id!
         // No, I need the mentee User object!
         const m = await Mentee.findByPk(connection.menteeId);
         const menteeUserObj = await User.findByPk(m.user_id);
         const mentorUserObj = await User.findByPk(mentor.user_id);
         
-        await notificationService.sendMessageRequestAccepted(mentorUserObj, menteeUserObj);
+        notificationService.sendMessageRequestAccepted(mentorUserObj, menteeUserObj).catch(error=>require('../utils/logger').error('Connection notification failed',error));
     } else {
         await Notification.create({
           receiverId: connection.menteeId,
@@ -103,7 +103,7 @@ exports.respondConnection = async (req, res) => {
 
     res.status(200).json({ status: "success", data: connection });
   } catch (error) {
-    console.error("Connection response error:", error);
+    require('../utils/logger').error("Connection response error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };
@@ -197,7 +197,7 @@ exports.getConnections = async (req, res) => {
 
     res.status(200).json({ status: "success", data: formattedConnections });
   } catch(error) {
-    console.error("Get connections error:", error);
+    require('../utils/logger').error("Get connections error:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 };

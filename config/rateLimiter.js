@@ -20,7 +20,7 @@ const authLimiter = rateLimit({
     message: "Too many login/auth requests from this IP. Please try again after 15 minutes.",
   },
   handler: (req, res, next, options) => {
-    console.warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on auth route ${req.path}`);
+    require('../utils/logger').warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on auth route ${req.path}`);
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -39,7 +39,7 @@ const paymentLimiter = rateLimit({
     message: "Too many payment requests from this IP. Please try again after 15 minutes.",
   },
   handler: (req, res, next, options) => {
-    console.warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on payment route ${req.path}`);
+    require('../utils/logger').warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on payment route ${req.path}`);
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -57,7 +57,7 @@ const kycLimiter = rateLimit({
     message: "Too many KYC submission attempts. Please try again after 1 hour.",
   },
   handler: (req, res, next, options) => {
-    console.warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on KYC route ${req.path}`);
+    require('../utils/logger').warn(`🛑 [RATE LIMIT EXCEEDED] IP: ${req.ip} on KYC route ${req.path}`);
     res.status(options.statusCode).json(options.message);
   },
 });
@@ -68,7 +68,7 @@ const kycLimiter = rateLimit({
  */
 const generalLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  max: 100,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

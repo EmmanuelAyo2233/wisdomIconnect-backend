@@ -41,8 +41,8 @@ exports.createPlaybook = async (req, res) => {
             data: { playbook },
         });
     } catch (error) {
-        console.error("Error creating playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error creating playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -86,8 +86,8 @@ exports.getAllPlaybooks = async (req, res) => {
             data: { playbooks: formattedPlaybooks },
         });
     } catch (error) {
-        console.error("Error getting all playbooks:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting all playbooks:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -137,8 +137,8 @@ exports.getMentorPlaybooks = async (req, res) => {
             data: { playbooks: formattedPlaybooks },
         });
     } catch (error) {
-        console.error("Error getting mentor playbooks:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting mentor playbooks:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -203,8 +203,8 @@ exports.getPlaybookDetails = async (req, res) => {
             data: { playbook: playbookJson },
         });
     } catch (error) {
-        console.error("Error getting playbook details:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting playbook details:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -228,8 +228,8 @@ exports.getAdminPlaybooks = async (req, res) => {
             data: { playbooks },
         });
     } catch (error) {
-        console.error("Error getting pending playbooks:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting pending playbooks:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -266,8 +266,8 @@ exports.approvePlaybook = async (req, res) => {
             data: { playbook },
         });
     } catch (error) {
-        console.error("Error approving playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error approving playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -335,8 +335,8 @@ exports.deletePlaybook = async (req, res) => {
             data: null,
         });
     } catch (error) {
-        console.error("Error deleting playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error deleting playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -383,8 +383,8 @@ exports.updatePlaybook = async (req, res) => {
             data: { playbook },
         });
     } catch (error) {
-        console.error("Error updating playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error updating playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -428,8 +428,8 @@ exports.likePlaybook = async (req, res) => {
             });
         }
     } catch (error) {
-        console.error("Error liking playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error liking playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -467,8 +467,8 @@ exports.savePlaybook = async (req, res) => {
             });
         }
     } catch (error) {
-        console.error("Error saving playbook:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error saving playbook:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -513,8 +513,8 @@ exports.getSavedPlaybooks = async (req, res) => {
             data: { playbooks: formattedPlaybooks },
         });
     } catch (error) {
-        console.error("Error getting saved playbooks:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting saved playbooks:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -606,7 +606,7 @@ exports.addPlaybookComment = async (req, res) => {
                 }
             }
         } catch (notifErr) {
-            console.error("Error sending comment notification:", notifErr);
+            require('../utils/logger').error("Error sending comment notification:", notifErr);
         }
 
         // Fetch it back right away with associations to return
@@ -630,8 +630,8 @@ exports.addPlaybookComment = async (req, res) => {
             data: { comment: createdComment }
         });
     } catch (error) {
-        console.error("Error adding playbook comment:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error adding playbook comment:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -670,8 +670,8 @@ exports.getPlaybookComments = async (req, res) => {
             data: { comments: rootComments }
         });
     } catch (error) {
-        console.error("Error getting playbook comments:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error getting playbook comments:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -702,8 +702,8 @@ exports.updatePlaybookComment = async (req, res) => {
             data: { comment }
         });
     } catch (error) {
-        console.error("Error updating comment:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error updating comment:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -732,8 +732,8 @@ exports.deletePlaybookComment = async (req, res) => {
             message: "Comment deleted successfully"
         });
     } catch (error) {
-        console.error("Error deleting comment:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error deleting comment:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };
 
@@ -772,7 +772,7 @@ exports.getPlaybookReplies = async (req, res) => {
             data: { replies: rows }
         });
     } catch (error) {
-        console.error("Error fetching replies:", error);
-        res.status(500).json({ status: "error", message: error.message });
+        require('../utils/logger').error("Error fetching replies:", error);
+        res.status(500).json({ status: "error", message: "Unable to complete this request" });
     }
 };

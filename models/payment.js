@@ -17,16 +17,16 @@ const Payment = sequelize.define(
             unique: true,
         },
         amount: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             allowNull: false,
         },
         mentorShare: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             allowNull: false,
             field: "mentor_share"
         },
         platformShare: {
-            type: DataTypes.FLOAT,
+            type: DataTypes.DECIMAL(14, 2),
             allowNull: false,
             field: "platform_share"
         },
@@ -54,7 +54,12 @@ const Payment = sequelize.define(
             allowNull: true,
             field: "refundReason"
         },
+        providerTransactionId: {type:DataTypes.STRING(100),allowNull:true,unique:true},
+        platformUserId: { type: DataTypes.INTEGER, allowNull: true },
+        refundState: { type: DataTypes.STRING(30), defaultValue: "none" },
+        originalUncredited: { type: DataTypes.BOOLEAN, defaultValue: false },
         appointmentId: {
+            unique: true,
             type: DataTypes.INTEGER,
             allowNull: false,
             references: {

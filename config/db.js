@@ -1,13 +1,17 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
 
-const sequelize = new Sequelize(
+if (process.env.NODE_ENV === 'test' && !process.env.TEST_DATABASE_STORAGE) {
+  throw new Error('Tests require an explicit isolated TEST_DATABASE_STORAGE');
+}
+
+const sequelize = process.env.NODE_ENV === 'test' ? new Sequelize({ dialect: 'sqlite', storage: process.env.TEST_DATABASE_STORAGE, logging: false }) : new Sequelize(
   process.env.DB_NAME || "wisdomconnect_test",
   process.env.DB_USERNAME,
   process.env.DB_PASSWORD,
   {
     host: process.env.DB_HOST,
-    port: process.env.DB_PORT || 4000,
+    port: Number(process.env.DB_PORT || 3306),
     dialect: "mysql",
     dialectOptions: {
       ssl: {
@@ -24,30 +28,5 @@ const sequelize = new Sequelize(
     logging: false, // optional
   }
 );
-
-sequelize
-  .authenticate()
-  .then(() => {
-     console.log("Database connected successfully");
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN fileUrl VARCHAR(500) DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN fileType VARCHAR(50) DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN fileName VARCHAR(255) DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN isRead BOOLEAN DEFAULT false;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN isDeleted BOOLEAN DEFAULT false;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage ADD COLUMN deletedForSenderId INT DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE chatmessage MODIFY message TEXT;").catch(e=>{});
-     
-     // New for Connection Deletion History
-     sequelize.query("ALTER TABLE connection ADD COLUMN deletedAtMentor DATETIME DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE connection ADD COLUMN deletedAtMentee DATETIME DEFAULT NULL;").catch(e=>{});
-     
-     // New for Topic Management
-     sequelize.query("ALTER TABLE mentor ADD COLUMN topics JSON DEFAULT NULL;").catch(e=>{});
-     
-     // New for Gamification
-     sequelize.query("ALTER TABLE achievements ADD COLUMN role VARCHAR(255) DEFAULT NULL;").catch(e=>{});
-     sequelize.query("ALTER TABLE user_achievements ADD COLUMN role VARCHAR(255) DEFAULT 'mentee';").catch(e=>{});
-  })
-  .catch((err) => console.error("Database connection error:", err));
 
 module.exports = sequelize;

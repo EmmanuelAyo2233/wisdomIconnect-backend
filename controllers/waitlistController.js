@@ -157,7 +157,7 @@ const joinWaitlist = async (req, res) => {
             to: entry.email,
             subject: "You're on the Wisicom Waitlist! 🎉",
             html: waitlistConfirmationEmail(entry.full_name, entry.role),
-        }).catch(err => console.error("Failed to send waitlist confirmation email:", err.message));
+        }).catch(err => require('../utils/logger').error("Failed to send waitlist confirmation email:", err.message));
 
         return res.status(201).json({
             status: "success",
@@ -172,7 +172,7 @@ const joinWaitlist = async (req, res) => {
             },
         });
     } catch (err) {
-        console.error("Waitlist join error:", err);
+        require('../utils/logger').error("Waitlist join error:", err);
         return res.status(500).json({ status: "error", message: "Something went wrong. Please try again." });
     }
 };
@@ -219,7 +219,7 @@ const getWaitlist = async (req, res) => {
             totalPages: Math.ceil(count / parseInt(limit)),
         });
     } catch (err) {
-        console.error("Admin get waitlist error:", err);
+        require('../utils/logger').error("Admin get waitlist error:", err);
         return res.status(500).json({ status: "error", message: "Failed to retrieve waitlist." });
     }
 };
@@ -242,7 +242,7 @@ const getWaitlistStats = async (req, res) => {
             data: { total, mentees, mentors, pending, invited, joined },
         });
     } catch (err) {
-        console.error("Admin waitlist stats error:", err);
+        require('../utils/logger').error("Admin waitlist stats error:", err);
         return res.status(500).json({ status: "error", message: "Failed to retrieve waitlist stats." });
     }
 };
@@ -274,7 +274,7 @@ const updateWaitlistStatus = async (req, res) => {
             data: entry,
         });
     } catch (err) {
-        console.error("Update waitlist status error:", err);
+        require('../utils/logger').error("Update waitlist status error:", err);
         return res.status(500).json({ status: "error", message: "Failed to update status." });
     }
 };
@@ -293,7 +293,7 @@ const deleteWaitlistEntry = async (req, res) => {
         await entry.destroy();
         return res.status(200).json({ status: "success", message: "Entry removed from waitlist." });
     } catch (err) {
-        console.error("Delete waitlist entry error:", err);
+        require('../utils/logger').error("Delete waitlist entry error:", err);
         return res.status(500).json({ status: "error", message: "Failed to delete entry." });
     }
 };

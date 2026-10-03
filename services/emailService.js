@@ -17,6 +17,7 @@ class EmailService {
         };
 
         await axios.post('https://api.brevo.com/v3/smtp/email', payload, {
+          timeout:15000,
           headers: {
             'accept': 'application/json',
             'api-key': process.env.BREVO_API_KEY,
@@ -24,10 +25,9 @@ class EmailService {
           }
         });
 
-        console.log('✅ Email sent successfully via Brevo API to:', to);
         return true;
       } catch (error) {
-        console.error('⚠️ Error sending email via Brevo API:', error.response?.data || error.message);
+        require('../utils/logger').error('⚠️ Error sending email via Brevo API:', error.response?.data || error.message);
         console.log('Attempting fallback via Nodemailer/SMTP...');
       }
     }
@@ -42,6 +42,7 @@ class EmailService {
       try {
         const transporter = nodemailer.createTransport({
           host: smtpHost,
+          connectionTimeout:15000,greetingTimeout:15000,socketTimeout:20000,
           port: smtpPort,
           secure: smtpPort === 465, // true for 465, false for 587 / 2525
           auth: {
@@ -49,7 +50,7 @@ class EmailService {
             pass: smtpPass
           },
           tls: {
-            rejectUnauthorized: false
+            rejectUnauthorized: true
           }
         });
 
@@ -60,17 +61,15 @@ class EmailService {
           html: html
         });
 
-        console.log('✅ Email sent successfully via Nodemailer/SMTP to:', to);
         return true;
       } catch (error) {
-        console.error('❌ Error sending email via Nodemailer/SMTP:', error.message);
+        require('../utils/logger').error('❌ Error sending email via Nodemailer/SMTP:', error.message);
         return false;
       }
     }
 
     // 3. If no credentials provided, log email details in development mode
-    console.warn(`⚠️ [EMAIL SKIPPED] Neither BREVO_API_KEY nor SMTP credentials (SMTP_EMAIL / SMTP_PASSWORD) are set in .env.`);
-    console.log(`📧 [EMAIL PREVIEW] To: ${to} | Subject: "${subject}"`);
+    require('../utils/logger').warn(`⚠️ [EMAIL SKIPPED] Neither BREVO_API_KEY nor SMTP credentials (SMTP_EMAIL / SMTP_PASSWORD) are set in .env.`);
     return false;
   }
 }

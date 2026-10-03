@@ -38,6 +38,7 @@ exports.verifyCallAccess = async (req, res) => {
             return res.status(403).json({ status: "fail", message: "Unauthorized to join this call ❌" });
         }
 
+        await require("../services/authorizationService").meetingFor(req.user, appointment.meetingId);
         // Payment validation
         const payment = await Payment.findOne({ where: { appointmentId: appointment.id } });
         if (payment && payment.amount > 0) {
@@ -63,7 +64,7 @@ exports.verifyCallAccess = async (req, res) => {
                     durationMinutes = endTotal - startTotal;
                 }
             } catch (e) {
-                console.warn("Failed to parse start/end time:", e);
+                require('../utils/logger').warn("Failed to parse start/end time:", e);
             }
         }
 
@@ -83,7 +84,7 @@ exports.verifyCallAccess = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("❌ Verify call access error:", error);
-        res.status(500).json({ status: "error", message: "Server error ❌", error: error.message });
+        require('../utils/logger').error("❌ Verify call access error:", error);
+        res.status(500).json({ status: "error", message: "Server error ❌",});
     }
 };

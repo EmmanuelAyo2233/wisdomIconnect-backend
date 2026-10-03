@@ -13,6 +13,7 @@ const {
     apppointmentLists,
 } = require("../controllers/menteescontroller");
 
+const canonical = require("../controllers/appointments");
 const router = express.Router();
 
 // Route to get all mentors
@@ -24,26 +25,26 @@ router
 // Route to book an appointment
 router
     .route("/:id/book")
-    .post(authentication, restrictTo("mentee"), bookApppointment);
+    .post(authentication, restrictTo("mentee"), canonical.bookAppointment);
 
 // route to get all appointment that was created by the mentee
 router
     .route("/my/appointments")
-    .get(authentication, restrictTo("mentee"), apppointmentLists);
+    .get(authentication, restrictTo("mentee"), canonical.getMenteeAppointments);
 
 // Route to reschedule an appointment
 router
     .route("/:id/reschedule")
-    .patch(authentication, restrictTo("mentee"), resceduleAppointment);
+    .patch(authentication, restrictTo("mentee"), (req, res) => res.status(409).json({ message: "Ask your mentor to reschedule this session." }));
 
 // Route to cancel an appointment
 router
     .route("/:id/cancel")
-    .patch(authentication, restrictTo("mentee"), cancelAppointment);
+    .patch(authentication, restrictTo("mentee"), canonical.cancelAppointment);
 
 // Route to delete an appointment
 router
     .route("/:id/delete")
-    .delete(authentication, restrictTo("mentee"), deleteAppointment);
+    .delete(authentication, restrictTo("mentee"), canonical.deleteAppointment);
 
 module.exports = router;

@@ -2,88 +2,57 @@ const jwt = require("jsonwebtoken");
 const { SECRET_KEY } = require("../config/reuseablePackages");
 const { Connection, ChatMessage, Mentor, Mentee, User } = require("../models");
 const { Op } = require("sequelize"); 
-const socketIo = require("socket.io");
+const { connectionFor, currentUser } = require('../services/authorizationService');
 const { cloudinary } = require("../utils/cloudinary");
 const streamifier = require("streamifier");
 
 // ===============================
 // 🔌 SOCKET.IO CHAT SETUP
 // ===============================
-const activeUsers = new Map(); // Global tracking Map
-
+const activeUsers = new Map();
 function setupWebsocket(io) {
-  const chatNamespace = io.of("/chat");
-
-  // 🔐 SOCKET AUTH
-  chatNamespace.use((socket, next) => {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("No token provided ❌"));
-
+  const ns = io.of('/chat');
+  ns.use(async (socket, next) => {
     try {
-      const decoded = jwt.verify(token, SECRET_KEY);
-      socket.user = decoded; // { id, userType }
-      next();
-    } catch (err) {
-      next(new Error("Invalid token ❌"));
-    }
+      const decoded = jwt.verify(socket.handshake.auth?.token, SECRET_KEY, { algorithms: ['HS256'] });
+      socket.user = await currentUser(decoded.id, decoded.tokenVersion);
+      socket.sessionVersion = decoded.tokenVersion || 0;
+      const timer = setTimeout(() => socket.disconnect(true), Math.max(0, decoded.exp * 1000 - Date.now()));
+      timer.unref?.(); socket.once('disconnect', () => clearTimeout(timer)); next();
+    } catch { next(new Error('Please sign in again')); }
   });
-
-  chatNamespace.on("connection", (socket) => {
+  ns.on('connection', (socket) => {
     const userId = socket.user.id;
-    activeUsers.set(userId, socket.id);
-
-    // Broadcast active status
-    chatNamespace.emit("user_status", { userId, status: "online" });
-
-    // Send the current list of online users to the newly connected user
-    socket.emit("initial_user_status", Array.from(activeUsers.keys()));
-
-    // 🤝 JOIN CONVERSATION
-    socket.on("join", async ({ connectionId }) => {
+    const sockets = activeUsers.get(userId) || new Set();
+    sockets.add(socket.id); activeUsers.set(userId, sockets);
+    let windowStart = Date.now(), eventCount = 0;
+    socket.use(async (_packet, next) => {
       try {
-        const userId = socket.user.id;
-        socket.join(`conn-${connectionId}`);
-
-        // Mark all messages as read
-        await ChatMessage.update(
-          { isRead: true },
-          { 
-            where: { 
-              chatAccessId: connectionId, 
-              isRead: false,
-              senderId: { [Op.ne]: userId }
-            } 
-          }
-        );
-
-        // Notify other user that messages are seen
-        chatNamespace.to(`conn-${connectionId}`).emit("messages_seen", { connectionId, seenBy: userId });
-
-        socket.emit("joined", { message: "Joined chat successfully ✅", connectionId });
-      } catch (error) {
-        console.error("❌ Chat join error:", error);
-        socket.emit("error", { message: "Failed to join chat ❌" });
-      }
+        if (Date.now() - windowStart > 60000) { windowStart = Date.now(); eventCount = 0; }
+        if (++eventCount > 240) throw new Error('Rate limit');
+        socket.user = await currentUser(userId, socket.sessionVersion); next();
+      } catch { socket.disconnect(true); }
     });
-
-    // 💬 SEND MESSAGE EVENT
-    socket.on("send-message", async (msgData) => {
+    socket.on('join', async (payload = {}) => {
       try {
-        const { connectionId } = msgData;
-        if (!connectionId) return socket.emit("error", { message: "Missing connection ID" });
-
-        // Broadcast the message to the room
-        chatNamespace.to(`conn-${connectionId}`).emit("receive_message", msgData);
-      } catch (err) {
-        console.error('Send message error:', err);
-        socket.emit("error", { message: "Failed to send message" });
-      }
+        const conn = await connectionFor(socket.user, payload.connectionId);
+        await socket.join(`conn-${conn.id}`);
+        await ChatMessage.update({ isRead: true }, { where: { chatAccessId: conn.id, isRead: false, senderId: { [Op.ne]: userId } } });
+        ns.to(`conn-${conn.id}`).emit('messages_seen', { connectionId: conn.id, seenBy: userId });
+        socket.emit('joined', { connectionId: conn.id });
+      } catch { socket.emit('error', { message: 'Conversation unavailable' }); }
     });
-
-    socket.on("disconnect", () => {
-      activeUsers.delete(userId);
-      chatNamespace.emit("user_status", { userId, status: "offline" });
+    socket.on('leave', (payload = {}) => {
+      if (Number.isSafeInteger(Number(payload.connectionId))) socket.leave(`conn-${Number(payload.connectionId)}`);
     });
+    socket.on('send-message', async (payload = {}) => {
+      try {
+        const conn = await connectionFor(socket.user, payload.connectionId);
+        const message = await ChatMessage.findOne({ where: { id: payload.id, chatAccessId: conn.id, senderId: userId } });
+        if (message) socket.to(`conn-${conn.id}`).emit('receive_message', { ...message.toJSON(), connectionId: conn.id });
+      } catch { socket.emit('error', { message: 'Unable to deliver message' }); }
+    });
+    socket.on('disconnect', () => { sockets.delete(socket.id); if (!sockets.size) activeUsers.delete(userId); });
   });
 }
 
@@ -96,9 +65,7 @@ const getChatMessages = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType || req.user.role;
 
-    const connection = await Connection.findOne({
-      where: { id: connectionId, status: "accepted" }
-    });
+    const connection = await connectionFor(req.user, connectionId);
 
     if (!connection) {
       return res.status(403).json({ status: "fail", message: "Connection not accepted ❌" });
@@ -124,12 +91,12 @@ const getChatMessages = async (req, res) => {
       order: [["createdAt", "ASC"]],
     });
 
-    const activeMessages = messages.filter(msg => msg.deletedForSenderId !== userId);
+    const activeMessages = messages.filter(msg => msg.deletedForSenderId !== userId && msg.deletedForReceiverId !== userId);
 
     res.status(200).json({ status: "success", data: activeMessages });
   } catch (error) {
-    console.error("❌ getChatMessages error:", error);
-    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+    require('../utils/logger').error("❌ getChatMessages error:", error);
+    res.status(error.statusCode || 500).json({ status: "error", message: "Internal server error ❌" });
   }
 };
 
@@ -139,13 +106,11 @@ const sendChatMessage = async (req, res) => {
     const { message } = req.body;
     const userId = req.user.id;
 
-    if (!message || message.trim() === "") {
+    if (typeof message !== "string" || !message.trim() || message.length > 10000) {
       return res.status(400).json({ status: "fail", message: "Message cannot be empty" });
     }
 
-    const connection = await Connection.findOne({
-      where: { id: connectionId, status: "accepted" }
-    });
+    const connection = await connectionFor(req.user, connectionId);
 
     if (!connection) {
       return res.status(403).json({ status: "fail", message: "Connection is not accepted or not found ❌" });
@@ -159,8 +124,8 @@ const sendChatMessage = async (req, res) => {
 
     res.status(201).json({ status: "success", data: newMessage });
   } catch (error) {
-    console.error("❌ sendChatMessage error:", error);
-    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+    require('../utils/logger').error("❌ sendChatMessage error:", error);
+    res.status(error.statusCode || 500).json({ status: "error", message: "Internal server error ❌" });
   }
 };
 
@@ -170,6 +135,7 @@ const deleteChatMessage = async (req, res) => {
     const { type } = req.query; // 'everyone' or 'me'
     const userId = req.user.id; // Sender
 
+    await connectionFor(req.user, connectionId);
     const message = await ChatMessage.findOne({
       where: { id: messageId, chatAccessId: connectionId }
     });
@@ -193,14 +159,14 @@ const deleteChatMessage = async (req, res) => {
         // For now, I'll just map the deletedForSenderId as the general `hiddenForUserId` effectively.
         // If sender triggers it => sets deletedForSenderId=userId. If receiver triggers it, wait, we don't have deletedForReceiverId!
         // Let's do a fast raw SQL update if needed, or just set deletedForSenderId to their ID arbitrarily since it's just tracking who hid it.
-        await message.update({ deletedForSenderId: userId });
+        await message.update({ deletedForReceiverId: userId });
       }
     }
 
     res.status(200).json({ status: "success", data: message });
   } catch (error) {
-    console.error("❌ deleteChatMessage error:", error);
-    res.status(500).json({ status: "error", message: "Internal server error ❌" });
+    require('../utils/logger').error("❌ deleteChatMessage error:", error);
+    res.status(error.statusCode || 500).json({ status: "error", message: "Internal server error ❌" });
   }
 };
 
@@ -214,10 +180,9 @@ const uploadChatFile = async (req, res) => {
     }
 
     const { mimetype, originalname } = req.file;
+    require('../utils/uploadValidation').validateFile(req.file);
 
-    const connection = await Connection.findOne({
-      where: { id: connectionId, status: "accepted" }
-    });
+    const connection = await connectionFor(req.user, connectionId);
 
     if (!connection) {
       return res.status(403).json({ status: "fail", message: "Connection not accepted ❌" });
@@ -246,8 +211,8 @@ const uploadChatFile = async (req, res) => {
 
     res.status(201).json({ status: "success", data: newMessage });
   } catch (error) {
-    console.error("❌ uploadChatFile error:", error);
-    res.status(500).json({ status: "error", message: "Failed to upload file ❌" });
+    require('../utils/logger').error("❌ uploadChatFile error:", error);
+    res.status(error.statusCode || 500).json({ status: "error", message: "Failed to upload file ❌" });
   }
 };
 
@@ -257,7 +222,7 @@ const deleteConversation = async (req, res) => {
     const userId = req.user.id;
     const userType = req.user.userType || req.user.role;
 
-    const connection = await Connection.findOne({ where: { id: connectionId } });
+    const connection = await connectionFor(req.user, connectionId);
     if (!connection) return res.status(404).json({ message: "Connection not found" });
 
     if (userType === 'mentor') {
@@ -274,7 +239,7 @@ const deleteConversation = async (req, res) => {
 
     res.status(200).json({ status: "success", message: "Conversation cleared for you ✅" });
   } catch (err) {
-    console.error("Delete conversation error:", err);
+    require('../utils/logger').error("Delete conversation error:", err);
     res.status(500).json({ message: "Internal server error" });
   }
 };
