@@ -37,20 +37,8 @@ const callRoutes = require("./routes/callRoutes");
 const app = express();
 
 // --- Enhanced CORS Configuration ---
-const allowedOrigins = [FRONTEND_URL, ...(process.env.CORS_ORIGINS || '').split(','), ...(process.env.NODE_ENV !== 'production' ? ['http://localhost:5173','http://127.0.0.1:5173'] : [])].map(s => s?.trim()).filter(Boolean);
 if(process.env.TRUST_PROXY_HOPS) app.set('trust proxy', Number(process.env.TRUST_PROXY_HOPS));
-
-const corsOptions = {
-    origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl, Render health checks)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin)) return callback(null, true);
-        return callback(new (require('./utils/security').HttpError)(403,'Origin not allowed'));
-    },
-    credentials: false,
-    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Idempotency-Key"],
-};
+const corsOptions = require('./config/cors').corsOptions();
 
 // Handle OPTIONS preflight BEFORE helmet or any other middleware
 app.options("*", cors(corsOptions));
@@ -207,11 +195,11 @@ if (process.env.NODE_ENV !== "production") autoSwaggerJs({
 let webhookTimer, reminderTimer;
 db.sequelize.authenticate()
     .then(async () => {
-        console.log("✅ Database synchronized successfully (Tables created/updated)");
+        console.log("Database connection established; schema changes require explicit migrations");
 
         // Note: Schema updates and column alterations are handled via Sequelize migrations (run `npm run migrate`)
 
-        server.listen(PORT, () => {
+        server.listen(Number(PORT || 5000), "0.0.0.0", () => {
             console.log(`Server is running on port ${PORT} http://localhost:${PORT}`);
             console.log(`Swagger docs available at http://localhost:${PORT}/docs`);
 
@@ -222,7 +210,9 @@ db.sequelize.authenticate()
         });
     })
     .catch(async (err) => {
-        console.error("❌ Database synchronization failed:", err);
+        require('./utils/logger').error('Database startup failed', err);
+        await db.sequelize.close().catch(() => {});
+        process.exit(1);
     });
 
 let shuttingDown=false;

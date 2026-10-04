@@ -303,6 +303,7 @@ exports.initializePayment = async (req, res) => {
   try {
     if (!PAYSTACK_SECRET_KEY)
       throw new HttpError(503, "Payment processing is unavailable");
+    const paymentMode = require("../config/paystack").paymentMode();
     const { appointment, intent } =
       await require("../services/bookingService").reserve(
         req.user,
@@ -333,6 +334,7 @@ exports.initializePayment = async (req, res) => {
           appointmentId: appointment.id,
           reference: intent.reference,
           accessCode: response.data.data.access_code,
+          paymentMode,
         });
     } catch {
       await intent.update({ status: "needs_review" });

@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const { paymentMode } = require("../config/paystack");
 const { HttpError, positiveId } = require("../utils/security");
 const { toMinor, fromMinor, split } = require("../utils/money");
 const { appointmentFor } = require("./authorizationService");
@@ -126,8 +127,7 @@ function validateCharge(data, intent) {
     String(data.customer?.email).toLowerCase() !== intent.email.toLowerCase()
   )
     throw new HttpError(400, "Payment does not match this booking");
-  const expectedDomain =
-    process.env.NODE_ENV === "production" ? "live" : "test";
+  const expectedDomain = paymentMode();
   if (data.domain !== expectedDomain)
     throw new HttpError(400, "Payment environment mismatch");
 }
@@ -337,8 +337,7 @@ async function finishRefund(reference, success, providerData) {
       providerData &&
       (Number(providerData.amount) !== toMinor(payment.amount) ||
         providerData.currency !== "NGN" ||
-        providerData.domain !==
-          (process.env.NODE_ENV === "production" ? "live" : "test"))
+        providerData.domain !== paymentMode())
     )
       throw new HttpError(
         409,

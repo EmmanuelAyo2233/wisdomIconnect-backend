@@ -1,6 +1,8 @@
 process.env.NODE_ENV = "test";
 process.env.TEST_DATABASE_STORAGE = ":memory:";
 process.env.SECRET_KEY = "isolated-test-key-never-used-in-deployment";
+process.env.PAYSTACK_SECRET_KEY = "sk_test_isolated_placeholder";
+process.env.PAYSTACK_MODE = "test";
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const {
@@ -115,6 +117,9 @@ test("paid booking rejects client price, foreign verification and duplicate sett
   );
   await assert.rejects(finance.settleCharge(data, stranger), {
     statusCode: 403,
+  });
+  await assert.rejects(finance.settleCharge({...data,domain:'live'},menteeUser), {
+    statusCode: 400,
   });
   const payment = await finance.settleCharge(data, menteeUser);
   assert.equal((await finance.settleCharge(data, menteeUser)).id, payment.id);
