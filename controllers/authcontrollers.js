@@ -290,7 +290,14 @@ return {newUser,mentee};
         return res.status(403).json({ status: "fail", message: "Your account has been suspended or banned. Please contact support." });
       }
 
-      if (!user.isVerified) return res.status(403).json({ status: "fail", requiresVerification: true, message: "Please verify your email before signing in." });
+      if (!user.isVerified) {
+        if (user.userType === "admin" || user.status === "approved" || user.accountStatus === "active") {
+          user.isVerified = true;
+          await User.update({ isVerified: true }, { where: { id: user.id } }).catch(() => {});
+        } else {
+          return res.status(403).json({ status: "fail", requiresVerification: true, message: "Please verify your email before signing in." });
+        }
+      }
 
       if (user.userType === "mentor") {
         await Mentor.update(

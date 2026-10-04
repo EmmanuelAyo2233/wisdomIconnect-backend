@@ -27,7 +27,11 @@ const text = (value, name, max = 500, required = true) => {
   return value.trim();
 };
 const accountEligible = (user) =>
-  Boolean(user && user.accountStatus === "active" && user.isVerified);
+  Boolean(
+    user &&
+      (user.accountStatus === "active" || !user.accountStatus) &&
+      (user.isVerified || user.userType === "admin" || user.status === "approved")
+  );
 const otp = () => crypto.randomInt(100000, 1000000).toString();
 const hashCode = (code) =>
   crypto.createHash("sha256").update(String(code)).digest("hex");

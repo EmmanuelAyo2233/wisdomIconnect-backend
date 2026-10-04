@@ -57,3 +57,14 @@ test('login OPTIONS returns exact Vercel origin and blocks an unapproved origin'
   assert.equal(denied.status,403);
   assert.equal(denied.headers.get('access-control-allow-origin'),null);
 });
+
+test('accountEligible accepts active verified users, admins, and approved accounts', () => {
+  const { accountEligible } = require('../utils/security');
+  assert.equal(accountEligible({ accountStatus: 'active', isVerified: true }), true);
+  assert.equal(accountEligible({ accountStatus: 'active', isVerified: false, userType: 'admin' }), true);
+  assert.equal(accountEligible({ accountStatus: 'active', isVerified: false, status: 'approved' }), true);
+  assert.equal(accountEligible({ accountStatus: 'suspended', isVerified: true }), false);
+  assert.equal(accountEligible({ accountStatus: 'banned', isVerified: true }), false);
+  assert.equal(accountEligible({ accountStatus: 'active', isVerified: false, userType: 'mentor', status: 'pending' }), false);
+});
+
