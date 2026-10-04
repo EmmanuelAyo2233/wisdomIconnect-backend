@@ -47,9 +47,9 @@ module.exports = {
         const existingLower = new Set(Object.keys(existing).map(k => k.toLowerCase()));
         for (const [field, attr] of Object.entries(attributes)) {
           if (!existing[field] && !existingLower.has(field.toLowerCase())) {
-            // Drop FK references: MySQL rejects addColumn if the referenced
-            // table/column isn't yet present in this migration step.
-            const { references: _ref, ...safeAttr } = attr;
+            // Drop FK references and unique constraints: some DB engines (TiDB,
+            // strict MySQL) reject addColumn with inline UNIQUE or FK constraints.
+            const { references: _ref, unique: _uniq, ...safeAttr } = attr;
             await queryInterface.addColumn(table, field, safeAttr);
           }
         }
