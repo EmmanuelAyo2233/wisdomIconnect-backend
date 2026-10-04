@@ -41,9 +41,17 @@ module.exports = {
         tables.add(table);
       } else {
         const existing = await queryInterface.describeTable(table);
+        // MySQL column names are case-insensitive; check case-insensitively to
+        // avoid "Duplicate column name" errors where the DB has a column with
+        // different capitalisation (e.g. linkedInUrl vs linkedinUrl).
+        const existingLower = new Set(Object.keys(existing).map(k => k.toLowerCase()));
         for (const [field, attr] of Object.entries(attributes)) {
-          if (!existing[field])
-            await queryInterface.addColumn(table, field, attr);
+          if (!existing[field] && !existingLower.has(field.toLowerCase())) {
+            // Drop FK references: MySQL rejects addColumn if the referenced
+            // table/column isn't yet present in this migration step.
+            const { references: _ref, ...safeAttr } = attr;
+            await queryInterface.addColumn(table, field, safeAttr);
+          }
         }
       }
     }
